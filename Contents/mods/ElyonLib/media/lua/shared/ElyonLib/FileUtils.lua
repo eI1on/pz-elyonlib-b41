@@ -109,7 +109,7 @@ end
 --- @param filePath string The path to the json file
 --- @param data table The Lua table to serialize and write
 --- @param modId string The mod's unique identifier
---- @param options table { isModFile: boolean, append: boolean }
+--- @param options table { isModFile: boolean, createIfNull: boolean, append: boolean }
 --- @return boolean success Returns true if writing was successful, false otherwise
 function FileUtils.writeJson(filePath, data, modId, options)
     local success, content = pcall(Json.stringify, data);

@@ -1,16 +1,16 @@
 local Constants = require("ElyonLib/Constants");
 
---- @class Logger
+---@class Logger
 local Logger = {};
 Logger.__index = Logger;
 
 --- A table to store loggers by mod ID
---- @type table<string, Logger>
+---@type table<string, Logger>
 local loggers = {};
 
 --- Creates a new Logger or returns the existing one for the given mod ID
---- @param modID string The mod's unique identifier
---- @return Logger logger
+---@param modID string The mod's unique identifier
+---@return Logger logger
 function Logger:new(modID)
     if loggers[modID] then return loggers[modID]; end
 
@@ -18,12 +18,12 @@ function Logger:new(modID)
     local o = {};
     setmetatable(o, self);
 
-    --- the current log level (default is INFO)
-    --- @type string
+    --- The current log level (default is INFO)
+    ---@type string
     o.currentLogLevel = isDebugEnabled() and Constants.LOG_LEVELS.DEBUG or Constants.LOG_LEVELS.INFO;
 
-    --- log level mapping to priority values
-    --- @type table<string, number>
+    --- Log level mapping to priority values
+    ---@type table<string, number>
     o.levels = {
         [Constants.LOG_LEVELS.ERROR] = 1,
         [Constants.LOG_LEVELS.WARNING] = 2,
@@ -38,57 +38,61 @@ function Logger:new(modID)
 end
 
 --- Sets the log level of the Logger
---- @param level string The log level to set (e.g., "ERROR", "WARNING", "INFO", "DEBUG")
+---@param level string The log level to set (e.g., "ERROR", "WARNING", "INFO", "DEBUG")
 function Logger:setLogLevel(level)
     self.currentLogLevel = level;
 end
 
 --- Checks if a message should be logged based on the current log level
---- @param level string The level of the log message
---- @return boolean shouldLog
+---@param level string The level of the log message
+---@return boolean shouldLog
 function Logger:shouldLog(level)
     return self.levels[level] <= self.levels[self.currentLogLevel];
 end
 
 --- Logs a message at the specified log level
---- @param level string The level of the log message (e.g., "ERROR", "WARNING", "INFO", "DEBUG")
---- @param message string|table|nil
---- @param indent number|nil
-function Logger:log(level, message, indent)
+---@param level string The level of the log message (e.g., "ERROR", "WARNING", "INFO", "DEBUG")
+---@param message string The log message template
+---@param ... any Variables to format the message
+function Logger:log(level, message, ...)
     if self:shouldLog(level) then
-        local outputMessage = type(message) == "table" and self:printTable(message, indent) or tostring(message);
-        print(string.format("[%s] [%s]: %s", self.modID, level, outputMessage));
+        local formattedMessage = string.format(message, ...);
+        print(string.format("[%s] [%s]: %s", self.modID, level, formattedMessage));
     end
 end
 
 --- Logs an error message
---- @param message string|table|nil
-function Logger:error(message)
-    self:log(Constants.LOG_LEVELS.ERROR, message);
+---@param message string The log message template
+---@param ... any Variables to format the message
+function Logger:error(message, ...)
+    self:log(Constants.LOG_LEVELS.ERROR, message, ...);
 end
 
 --- Logs a warning message
---- @param message string|table|nil
-function Logger:warning(message)
-    self:log(Constants.LOG_LEVELS.WARNING, message);
+---@param message string The log message template
+---@param ... any Variables to format the message
+function Logger:warning(message, ...)
+    self:log(Constants.LOG_LEVELS.WARNING, message, ...);
 end
 
 --- Logs an info message
---- @param message string|table|nil
-function Logger:info(message)
-    self:log(Constants.LOG_LEVELS.INFO, message);
+---@param message string The log message template
+---@param ... any Variables to format the message
+function Logger:info(message, ...)
+    self:log(Constants.LOG_LEVELS.INFO, message, ...);
 end
 
 --- Logs a debug message
---- @param message string|table|nil
-function Logger:debug(message)
-    self:log(Constants.LOG_LEVELS.DEBUG, message);
+---@param message string The log message template
+---@param ... any Variables to format the message
+function Logger:debug(message, ...)
+    self:log(Constants.LOG_LEVELS.DEBUG, message, ...);
 end
 
 --- Recursively pretty-prints a table
---- @param tbl table The table to pretty print
---- @param indent number|nil The current indentation level (used for recursion)
---- @param seen table|nil A table used to track circular references
+---@param tbl table The table to pretty print
+---@param indent number|nil The current indentation level (used for recursion)
+---@param seen table|nil A table used to track circular references
 function Logger:printTable(tbl, indent, seen)
     indent = indent or 0;
     seen = seen or {};
@@ -121,8 +125,8 @@ function Logger:printTable(tbl, indent, seen)
 end
 
 --- Logs a pretty-printed table at the specified log level
---- @param level string The level of the log message (e.g., "ERROR", "WARNING", "INFO", "DEBUG")
---- @param t table The table to pretty print
+---@param level string The level of the log message (e.g., "ERROR", "WARNING", "INFO", "DEBUG")
+---@param t table The table to pretty print
 function Logger:logTable(level, t)
     if self:shouldLog(level) then
         self:printTable(t);
