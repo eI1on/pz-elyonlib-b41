@@ -1,5 +1,5 @@
 version=1
-id=
+id=3384377738
 title=Elyon Lib
 description=Elyon Lib is a utility mod that compiles the most common utility functions used across my mods. It does not provide any functionality on its own.
 description=
