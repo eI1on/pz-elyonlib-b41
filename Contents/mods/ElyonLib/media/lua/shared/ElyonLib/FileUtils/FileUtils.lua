@@ -1,5 +1,5 @@
-local Logger = require("ElyonLib/Logger");
-local Json = require("ElyonLib/Json");
+local Logger = require("ElyonLib/Core/ElyonLibLogger");
+local JSON = require("ElyonLib/FileUtils/JSON");
 
 local FileUtils = {};
 
@@ -95,7 +95,7 @@ function FileUtils.readJson(filePath, modId, options)
     local content = FileUtils.readFile(filePath, modId, options);
     if not content then return nil; end
 
-    local success, data = pcall(Json.parse, content)
+    local success, data = pcall(JSON.parse, content)
     if not success then
         local logger = Logger:new(modId);
         logger:error(string.format("Failed to parse json from file: %s. Error: %s", filePath, data));
@@ -112,7 +112,7 @@ end
 --- @param options table { isModFile: boolean, createIfNull: boolean, append: boolean }
 --- @return boolean success Returns true if writing was successful, false otherwise
 function FileUtils.writeJson(filePath, data, modId, options)
-    local success, content = pcall(Json.stringify, data);
+    local success, content = pcall(JSON.stringify, data);
     if not success then
         local logger = Logger:new(modId);
         logger:error(string.format("Failed to serialize data to json for file: %s. Error: %s", filePath, content));

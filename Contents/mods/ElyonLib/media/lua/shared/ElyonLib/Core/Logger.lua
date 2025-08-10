@@ -1,8 +1,14 @@
-local Constants = require("ElyonLib/Constants");
+local Constants = require("ElyonLib/Core/Constants");
+local TableFormatter = require("ElyonLib/TableUtils/TableFormatter");
 
 ---@class Logger
 local Logger = {};
 Logger.__index = Logger;
+
+Logger.logFileMask = "admin";
+Logger.isServer = isServer();
+Logger.isClient = isClient();
+
 
 --- A table to store loggers by mod ID
 ---@type table<string, Logger>
@@ -10,8 +16,9 @@ local loggers = {};
 
 --- Creates a new Logger or returns the existing one for the given mod ID
 ---@param modID string The mod's unique identifier
+---@param modVersion string|nil The mod version for which this Logger is created
 ---@return Logger logger
-function Logger:new(modID)
+function Logger:new(modID, modVersion)
     if loggers[modID] then return loggers[modID]; end
 
     ---@class Logger
@@ -32,6 +39,7 @@ function Logger:new(modID)
     };
 
     o.modID = modID;
+    o.modVersion = modVersion;
     loggers[modID] = o;
 
     return o;
@@ -89,48 +97,68 @@ function Logger:debug(message, ...)
     self:log(Constants.LOG_LEVELS.DEBUG, message, ...);
 end
 
---- Recursively pretty-prints a table
----@param tbl table The table to pretty print
----@param indent number|nil The current indentation level (used for recursion)
----@param seen table|nil A table used to track circular references
-function Logger:printTable(tbl, indent, seen)
-    indent = indent or 0;
-    seen = seen or {};
-    local spacing = string.rep("  ", indent);
-
-    if seen[tbl] then
-        print(spacing .. "<Circular Reference>");
-        return;
-    end
-    seen[tbl] = true;
-
-    if type(tbl) ~= "table" then
-        print(spacing .. tostring(tbl));
-        return;
-    end
-
-    print(spacing .. "{");
-    for k, v in pairs(tbl) do
-        local key = (type(k) == "string") and ('"' .. k .. '"') or tostring(k);
-        if type(v) == "table" then
-            print(spacing .. "  [" .. key .. "] = ");
-            self:printTable(v, indent + 1, seen);
-        else
-            local value = (type(v) == "string") and ('"' .. v .. '"') or tostring(v);
-            print(spacing .. "  [" .. key .. "] = " .. value);
-        end
-    end
-    print(spacing .. "}");
-    seen[tbl] = nil;
-end
-
 --- Logs a pretty-printed table at the specified log level
 ---@param level string The level of the log message (e.g., "ERROR", "WARNING", "INFO", "DEBUG")
----@param t table The table to pretty print
-function Logger:logTable(level, t)
+---@param tbl table The table to pretty print
+function Logger:logTable(level, tbl)
     if self:shouldLog(level) then
-        self:printTable(t);
+        local formattedTable = TableFormatter.format(tbl);
+        self:log(level, "\n%s", formattedTable);
     end
+end
+
+function Logger:writeToLogFile(logFileMask, logText)
+    writeLog(logFileMask, logText);
+end
+
+--- On Client:<br>
+---     "client" > logs on the client<br>
+---     "server" > sends the log text to the server<br>
+---     "both" > logs on the client and sends the log text to the server<br>
+--- On Server:<br>
+---     "server" > logs on the server<br>
+---     "both" > sends the log text to all clients (logging is done locally too)<br>
+---@param options table {logFileMask: string, logText: string, logMode: "client"|"server"|"both"}
+function Logger:writeLog(options)
+    if not options or type(options) ~= "table" then
+        self:error("Logger.writeLog requires a table with logFileMask, logText, and logMode.");
+        return;
+    end
+
+    local logFileMask = options.logFileMask;
+    local logText = options.logText or "";
+    local logMode = options.logMode or (Logger.isServer and "server" or "client");
+
+    if logMode == "server" and Logger.isServer then
+        Logger:writeToLogFile(logFileMask, logText);
+    elseif logMode == "client" and not Logger.isServer then
+        Logger:writeToLogFile(logFileMask, logText);
+    elseif logMode == "both" then
+        Logger:writeToLogFile(logFileMask, logText);
+        if Logger.isServer then
+            sendServerCommand("ElyonLib", "LogToClient", {logFileMask = logFileMask, logText = logText});
+        else
+            sendClientCommand("ElyonLib", "LogToServer", {logFileMask = logFileMask, logText = logText});
+        end
+    end
+end
+
+-- On the server side, listen for the "LogToServer" command from clients and log the data
+if Logger.isServer then
+    Events.OnClientCommand.Add(function(module, command, player, args)
+        if module == "ElyonLib" and command == "LogToServer" and args then
+            Logger:writeToLogFile(args.logFileMask, args.logText);
+        end
+    end)
+end
+
+-- On the client side, listen for the "LogToClient" command from the server and log the data
+if not Logger.isServer then
+    Events.OnServerCommand.Add(function(module, command, args)
+        if module == "ElyonLib" and command == "LogToClient" and args then
+            Logger:writeToLogFile(args.logFileMask, args.logText);
+        end
+    end)
 end
 
 return Logger;

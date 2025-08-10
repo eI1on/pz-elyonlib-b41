@@ -19,4 +19,8 @@
     "Lua.diagnostics.globals": [
         "require"
     ],
+        "[lua]": {
+        "editor.defaultFormatter": "JohnnyMorganz.stylua",
+        "editor.formatOnSave": true
+    }
 }

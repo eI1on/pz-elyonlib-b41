@@ -1,4 +1,4 @@
--- Json.lua
+-- JSON.lua
 --
 -- Copyright (c) 2020 rxi, modified by JabDoesThings 
 -- (https://gist.github.com/JabDoesThings/0742c08f3d066425857c11f7ef28183c)
@@ -22,15 +22,15 @@
 -- SOFTWARE.
 --
 
-local Logger = require("ElyonLib/Logger");
+local Logger = require("ElyonLib/Core/ElyonLibLogger");
 
-local json = { _version = "0.1.2" }
+local JSON = { _version = "0.1.2" };
 
 -------------------------------------------------------------------------------
 -- Encode
 -------------------------------------------------------------------------------
 
-local encode
+local encode;
 
 local escape_char_map = {
   [ "\\" ] = "\\",
@@ -40,82 +40,82 @@ local escape_char_map = {
   [ "\n" ] = "n",
   [ "\r" ] = "r",
   [ "\t" ] = "t",
-}
+};
 
-local escape_char_map_inv = { [ "/" ] = "/" }
+local escape_char_map_inv = { [ "/" ] = "/" };
 for k, v in pairs(escape_char_map) do
-  escape_char_map_inv[v] = k
+  escape_char_map_inv[v] = k;
 end
 
 local function escape_char(c)
-  return "\\" .. (escape_char_map[c] or string.format("u%04x", c:byte()))
+  return "\\" .. (escape_char_map[c] or string.format("u%04x", c:byte()));
 end
 
 local function encode_nil(val)
-  return "null"
+  return "null";
 end
 
 local function _next(t)
-  if type(t) ~= 'table' then return nil end
-  return t[1]
+  if type(t) ~= 'table' then return nil; end
+  return t[1];
 end
 
 local function _rawget(t, i)
-  if type(t) ~= 'table' then return nil end
-  return t[i]
+  if type(t) ~= 'table' then return nil; end
+  return t[i];
 end
 
 local function encode_table(val, stack)
-  local res = {}
-  stack = stack or {}
+  local res = {};
+  stack = stack or {};
 
   -- Circular reference?
-  if stack[val] then Logger:error("circular reference") end
+  if stack[val] then Logger:error("circular reference"); end
 
-  stack[val] = true
+  stack[val] = true;
   -- if _rawget(val, 1) ~= nil or _next(val) == nil then
   if _rawget(val, 1) ~= nil then
     -- Treat as array -- check keys are valid and it is not sparse
-    local n = 0
+    local n = 0;
     for k in pairs(val) do
       if type(k) ~= "number" then
-        Logger:error("invalid table: mixed or invalid key types")
+        Logger:error("invalid table: mixed or invalid key types");
       end
-      n = n + 1
+      n = n + 1;
     end
     if n ~= #val then
-        Logger:error("invalid table: sparse array")
+        Logger:error("invalid table: sparse array");
     end
     -- Encode
     for i, v in ipairs(val) do
-      table.insert(res, encode(v, stack))
+      table.insert(res, encode(v, stack));
     end
-    stack[val] = nil
-    return "[" .. table.concat(res, ",") .. "]"
+    stack[val] = nil;
+    return "[" .. table.concat(res, ",") .. "]";
 
   else
     -- Treat as an object
     for k, v in pairs(val) do
       if type(k) ~= "string" then
-        Logger:error("invalid table: mixed or invalid key types")
+        Logger:error("invalid table: mixed or invalid key types");
       end
-      table.insert(res, encode(k, stack) .. ":" .. encode(v, stack))
+      table.insert(res, encode(k, stack) .. ":" .. encode(v, stack));
     end
-    stack[val] = nil
-    return "{" .. table.concat(res, ",") .. "}"
+    stack[val] = nil;
+    return "{" .. table.concat(res, ",") .. "}";
   end
 end
 
 local function encode_string(val)
-  return '"' .. val:gsub('[%z\1-\31\\"]', escape_char) .. '"'
+  return '"' .. val:gsub('[%z\1-\31\\"]', escape_char) .. '"';
 end
 
 local function encode_number(val)
   -- Check for NaN, -inf and inf
   if val ~= val or val <= -math.huge or val >= math.huge then
-    Logger:error("unexpected number value '" .. tostring(val) .. "'")
+    Logger:error("unexpected number value '" .. tostring(val) .. "'");
   end
-  return string.format("%.14g", val)
+  return string.format("%.14g", val);
 end
 
 local type_func_map = {
@@ -124,214 +124,208 @@ local type_func_map = {
   [ "string"  ] = encode_string,
   [ "number"  ] = encode_number,
   [ "boolean" ] = tostring,
-}
+};
 
 encode = function(val, stack)
-  local t = type(val)
-  local f = type_func_map[t]
+  local t = type(val);
+  local f = type_func_map[t];
   if f then
-    return f(val, stack)
+    return f(val, stack);
   end
-  Logger:error("unexpected type '" .. t .. "'")
+  Logger:error("unexpected type '" .. t .. "'");
 end
 
-function json.stringify(val)
-  return ( encode(val) )
+function JSON.stringify(val)
+  return ( encode(val) );
 end
 
 -------------------------------------------------------------------------------
 -- Decode
 -------------------------------------------------------------------------------
 
-local parse
+local parse;
 
 local function create_set(...)
-  local res = {}
+  local res = {};
   for i = 1, select("#", ...) do
-    res[ select(i, ...) ] = true
+    res[ select(i, ...) ] = true;
   end
-  return res
+  return res;
 end
 
-local space_chars   = create_set(" ", "\t", "\r", "\n")
-local delim_chars   = create_set(" ", "\t", "\r", "\n", "]", "}", ",")
-local escape_chars  = create_set("\\", "/", '"', "b", "f", "n", "r", "t", "u")
-local literals      = create_set("true", "false", "null")
+local space_chars   = create_set(" ", "\t", "\r", "\n");
+local delim_chars   = create_set(" ", "\t", "\r", "\n", "]", "}", ",");
+local escape_chars  = create_set("\\", "/", '"', "b", "f", "n", "r", "t", "u");
+local literals      = create_set("true", "false", "null");
 
 local literal_map = {
   [ "true"  ] = true,
   [ "false" ] = false,
   [ "null"  ] = nil,
-}
+};
 
 local function next_char(str, idx, set, negate)
   for i = idx, #str do
     if set[str:sub(i, i)] ~= negate then
-      return i
+      return i;
     end
   end
-  return #str + 1
+  return #str + 1;
 end
 
 local function decode_error(str, idx, msg)
-  local line_count = 1
-  local col_count = 1
+  local line_count = 1;
+  local col_count = 1;
   for i = 1, idx - 1 do
-    col_count = col_count + 1
+    col_count = col_count + 1;
     if str:sub(i, i) == "\n" then
-      line_count = line_count + 1
-      col_count = 1
+      line_count = line_count + 1;
+      col_count = 1;
     end
   end
-  Logger:error( string.format("%s at line %d col %d", msg, line_count, col_count) )
+  Logger:error( string.format("%s at line %d col %d", msg, line_count, col_count) );
 end
 
 local function codepoint_to_utf8(n)
   -- http://scripts.sil.org/cms/scripts/page.php?site_id=nrsi&id=iws-appendixa
-  local f = math.floor
+  local f = math.floor;
   if n <= 0x7f then
-    return string.char(n)
+    return string.char(n);
   elseif n <= 0x7ff then
-    return string.char(f(n / 64) + 192, n % 64 + 128)
+    return string.char(f(n / 64) + 192, n % 64 + 128);
   elseif n <= 0xffff then
-    return string.char(f(n / 4096) + 224, f(n % 4096 / 64) + 128, n % 64 + 128)
+    return string.char(f(n / 4096) + 224, f(n % 4096 / 64) + 128, n % 64 + 128);
   elseif n <= 0x10ffff then
     return string.char(f(n / 262144) + 240, f(n % 262144 / 4096) + 128,
-                       f(n % 4096 / 64) + 128, n % 64 + 128)
+                       f(n % 4096 / 64) + 128, n % 64 + 128);
   end
-  Logger:error( string.format("invalid unicode codepoint '%x'", n) )
+  Logger:error( string.format("invalid unicode codepoint '%x'", n) );
 end
 
 local function parse_unicode_escape(s)
-  local n1 = tonumber( s:sub(1, 4),  16 )
-  local n2 = tonumber( s:sub(7, 10), 16 )
+  local n1 = tonumber( s:sub(1, 4),  16 );
+  local n2 = tonumber( s:sub(7, 10), 16 );
    -- Surrogate pair?
   if n2 then
-    return codepoint_to_utf8((n1 - 0xd800) * 0x400 + (n2 - 0xdc00) + 0x10000)
+    return codepoint_to_utf8((n1 - 0xd800) * 0x400 + (n2 - 0xdc00) + 0x10000);
   else
-    return codepoint_to_utf8(n1)
+    return codepoint_to_utf8(n1);
   end
 end
 
 local function parse_string(str, i)
-  local res = ""
-  local j = i + 1
-  local k = j
-
+  local res = "";
+  local j = i + 1;
+  local k = j;
   while j <= #str do
-    local x = str:byte(j)
-
+    local x = str:byte(j);
     if x < 32 then
-      decode_error(str, j, "control character in string")
-
+      decode_error(str, j, "control character in string");
     elseif x == 92 then -- `\`: Escape
-      res = res .. str:sub(k, j - 1)
-      j = j + 1
-      local c = str:sub(j, j)
+      res = res .. str:sub(k, j - 1);
+      j = j + 1;
+      local c = str:sub(j, j);
       if c == "u" then
         local hex = str:match("^[dD][89aAbB]%x%x\\u%x%x%x%x", j + 1)
                  or str:match("^%x%x%x%x", j + 1)
-                 or decode_error(str, j - 1, "invalid unicode escape in string")
-        res = res .. parse_unicode_escape(hex)
-        j = j + #hex
+                 or decode_error(str, j - 1, "invalid unicode escape in string");
+        res = res .. parse_unicode_escape(hex);
+        j = j + #hex;
       else
         if not escape_chars[c] then
-          decode_error(str, j - 1, "invalid escape char '" .. c .. "' in string")
+          decode_error(str, j - 1, "invalid escape char '" .. c .. "' in string");
         end
-        res = res .. escape_char_map_inv[c]
+        res = res .. escape_char_map_inv[c];
       end
-      k = j + 1
-
+      k = j + 1;
     elseif x == 34 then -- `"`: End of string
-      res = res .. str:sub(k, j - 1)
-      return res, j + 1
+      res = res .. str:sub(k, j - 1);
+      return res, j + 1;
     end
-
-    j = j + 1
+    j = j + 1;
   end
-
-  decode_error(str, i, "expected closing quote for string")
+  decode_error(str, i, "expected closing quote for string");
 end
 
 local function parse_number(str, i)
-  local x = next_char(str, i, delim_chars)
-  local s = str:sub(i, x - 1)
-  local n = tonumber(s)
+  local x = next_char(str, i, delim_chars);
+  local s = str:sub(i, x - 1);
+  local n = tonumber(s);
   if not n then
-    decode_error(str, i, "invalid number '" .. s .. "'")
+    decode_error(str, i, "invalid number '" .. s .. "'");
   end
-  return n, x
+  return n, x;
 end
 
 local function parse_literal(str, i)
-  local x = next_char(str, i, delim_chars)
-  local word = str:sub(i, x - 1)
+  local x = next_char(str, i, delim_chars);
+  local word = str:sub(i, x - 1);
   if not literals[word] then
-    decode_error(str, i, "invalid literal '" .. word .. "'")
+    decode_error(str, i, "invalid literal '" .. word .. "'");
   end
-  return literal_map[word], x
+  return literal_map[word], x;
 end
 
 local function parse_array(str, i)
-  local res = {}
-  local n = 1
-  i = i + 1
+  local res = {};
+  local n = 1;
+  i = i + 1;
   while 1 do
-    local x
-    i = next_char(str, i, space_chars, true)
+    local x;
+    i = next_char(str, i, space_chars, true);
     -- Empty / end of array?
     if str:sub(i, i) == "]" then
-      i = i + 1
-      break
+      i = i + 1;
+      break;
     end
     -- Read token
-    x, i = parse(str, i)
-    res[n] = x
-    n = n + 1
+    x, i = parse(str, i);
+    res[n] = x;
+    n = n + 1;
     -- Next token
-    i = next_char(str, i, space_chars, true)
-    local chr = str:sub(i, i)
-    i = i + 1
-    if chr == "]" then break end
-    if chr ~= "," then decode_error(str, i, "expected ']' or ','") end
+    i = next_char(str, i, space_chars, true);
+    local chr = str:sub(i, i);
+    i = i + 1;
+    if chr == "]" then break; end
+    if chr ~= "," then decode_error(str, i, "expected ']' or ','"); end
   end
-  return res, i
+  return res, i;
 end
 
 local function parse_object(str, i)
-  local res = {}
-  i = i + 1
+  local res = {};
+  i = i + 1;
   while 1 do
-    local key, val
-    i = next_char(str, i, space_chars, true)
+    local key, val;
+    i = next_char(str, i, space_chars, true);
     -- Empty / end of object?
     if str:sub(i, i) == "}" then
-      i = i + 1
-      break
+      i = i + 1;
+      break;
     end
     -- Read key
     if str:sub(i, i) ~= '"' then
-      decode_error(str, i, "expected string for key")
+      decode_error(str, i, "expected string for key");
     end
-    key, i = parse(str, i)
+    key, i = parse(str, i);
     -- Read ':' delimiter
-    i = next_char(str, i, space_chars, true)
+    i = next_char(str, i, space_chars, true);
     if str:sub(i, i) ~= ":" then
-      decode_error(str, i, "expected ':' after key")
+      decode_error(str, i, "expected ':' after key");
     end
-    i = next_char(str, i + 1, space_chars, true)
+    i = next_char(str, i + 1, space_chars, true);
     -- Read value
-    val, i = parse(str, i)
+    val, i = parse(str, i);
     -- Set
-    res[key] = val
+    res[key] = val;
     -- Next token
-    i = next_char(str, i, space_chars, true)
-    local chr = str:sub(i, i)
-    i = i + 1
-    if chr == "}" then break end
-    if chr ~= "," then decode_error(str, i, "expected '}' or ','") end
+    i = next_char(str, i, space_chars, true);
+    local chr = str:sub(i, i);
+    i = i + 1;
+    if chr == "}" then break; end
+    if chr ~= "," then decode_error(str, i, "expected '}' or ','"); end
   end
-  return res, i
+  return res, i;
 end
 
 local char_func_map = {
@@ -352,27 +346,27 @@ local char_func_map = {
   [ "n" ] = parse_literal,
   [ "[" ] = parse_array,
   [ "{" ] = parse_object,
-}
+};
 
 parse = function(str, idx)
-  local chr = str:sub(idx, idx)
-  local f = char_func_map[chr]
+  local chr = str:sub(idx, idx);
+  local f = char_func_map[chr];
   if f then
-    return f(str, idx)
+    return f(str, idx);
   end
-  decode_error(str, idx, "unexpected character '" .. chr .. "'")
+  decode_error(str, idx, "unexpected character '" .. chr .. "'");
 end
 
-function json.parse(str)
+function JSON.parse(str)
   if type(str) ~= "string" then
-    Logger:error("expected argument of type string, got " .. type(str))
+    Logger:error("expected argument of type string, got " .. type(str));
   end
-  local res, idx = parse(str, next_char(str, 1, space_chars, true))
-  idx = next_char(str, idx, space_chars, true)
+  local res, idx = parse(str, next_char(str, 1, space_chars, true));
+  idx = next_char(str, idx, space_chars, true);
   if idx <= #str then
-    decode_error(str, idx, "trailing garbage")
+    decode_error(str, idx, "trailing garbage");
   end
-  return res
+  return res;
 end
 
-return json
+return JSON;

@@ -1,8 +1,7 @@
 name=Elyon Lib
 poster=poster.png
 id=ElyonLib
-description=Elyon Lib is a utility mod that compiles the most common utility functions used across my mods. It does not provide any functionality on its own.
-description=
+description=This is a utility framework that provides essential tools and functions. It's designed to streamline common development tasks and provide a solid foundation for other mods.
 description=As an end user, you only need to install Elyon Lib if a mod you use requires it.
 tags=Build 41,Misc,Multiplayer,Interface
 versionMin=41.0
