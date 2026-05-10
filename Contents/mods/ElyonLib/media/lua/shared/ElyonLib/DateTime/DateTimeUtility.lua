@@ -331,6 +331,140 @@ function DateTimeUtility.toTimestamp(dateTable)
 	})
 end
 
+function DateTimeUtility.timestampToDateKey(timestamp)
+	timestamp = tonumber(timestamp)
+	return timestamp and os.date("%Y-%m-%d", timestamp) or nil
+end
+
+function DateTimeUtility.normalizeDateKey(value)
+	local text = tostring(value or ""):gsub("^%s+", ""):gsub("%s+$", "")
+	if text == "" then
+		return nil
+	end
+
+	local year, month, day = text:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)$")
+	if not year then
+		day, month, year = text:match("^(%d%d)%-(%d%d)%-(%d%d%d%d)$")
+	end
+	if not year then
+		day, month, year = text:match("^(%d%d)/(%d%d)/(%d%d%d%d)$")
+	end
+
+	year = tonumber(year)
+	month = tonumber(month)
+	day = tonumber(day)
+	if not DateTimeUtility.isValidDate({ year = year, month = month, day = day }) then
+		return nil
+	end
+
+	return string.format("%04d-%02d-%02d", year, month, day)
+end
+
+function DateTimeUtility.dateKeyToDateTable(dateKey, hour, min, sec)
+	dateKey = DateTimeUtility.normalizeDateKey(dateKey)
+	if not dateKey then
+		return nil
+	end
+
+	local year, month, day = dateKey:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)$")
+	return {
+		year = tonumber(year),
+		month = tonumber(month),
+		day = tonumber(day),
+		hour = hour == nil and 12 or tonumber(hour) or 12,
+		min = min == nil and 0 or tonumber(min) or 0,
+		second = sec == nil and 0 or tonumber(sec) or 0,
+	}
+end
+
+function DateTimeUtility.dateTableToDateKey(dateTable)
+	if not dateTable then
+		return nil
+	end
+
+	return DateTimeUtility.normalizeDateKey(
+		string.format(
+			"%04d-%02d-%02d",
+			tonumber(dateTable.year) or 1971,
+			tonumber(dateTable.month) or 1,
+			tonumber(dateTable.day) or 1
+		)
+	)
+end
+
+function DateTimeUtility.formatDateKey(dateKey, order, separator)
+	dateKey = DateTimeUtility.normalizeDateKey(dateKey)
+	if not dateKey then
+		return ""
+	end
+
+	local year, month, day = dateKey:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)$")
+	order = tostring(order or "YMD"):upper()
+	separator = separator or "-"
+
+	if order == "DMY" then
+		return string.format("%s%s%s%s%s", day, separator, month, separator, year)
+	end
+	if order == "MDY" then
+		return string.format("%s%s%s%s%s", month, separator, day, separator, year)
+	end
+	return string.format("%s%s%s%s%s", year, separator, month, separator, day)
+end
+
+function DateTimeUtility.dateKeyToTimestamp(dateKey)
+	dateKey = DateTimeUtility.normalizeDateKey(dateKey)
+	if not dateKey then
+		return nil
+	end
+
+	local year, month, day = dateKey:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)$")
+	return DateTimeUtility.toTimestamp({
+		year = tonumber(year),
+		month = tonumber(month),
+		day = tonumber(day),
+		hour = 12,
+		min = 0,
+		sec = 0,
+	})
+end
+
+function DateTimeUtility.addDaysToDateKey(dateKey, days)
+	local timestamp = DateTimeUtility.dateKeyToTimestamp(dateKey)
+	if not timestamp then
+		return nil
+	end
+
+	return os.date("%Y-%m-%d", timestamp + (math.floor(tonumber(days) or 0) * 86400))
+end
+
+function DateTimeUtility.daysBetweenDateKeys(startDateKey, endDateKey)
+	local startTs = DateTimeUtility.dateKeyToTimestamp(startDateKey)
+	local endTs = DateTimeUtility.dateKeyToTimestamp(endDateKey)
+	if not startTs or not endTs then
+		return 0
+	end
+
+	return math.floor(((endTs - startTs) / 86400) + 0.5)
+end
+
+function DateTimeUtility.compareDateKeys(a, b)
+	a = DateTimeUtility.normalizeDateKey(a)
+	b = DateTimeUtility.normalizeDateKey(b)
+	if not a and not b then
+		return 0
+	end
+	if not a then
+		return -1
+	end
+	if not b then
+		return 1
+	end
+	if a < b then
+		return -1
+	end
+	return a > b and 1 or 0
+end
+
 --- Convert a timestamp to a date table
 ---@param timestamp number The timestamp in seconds since epoch
 ---@param useUTC boolean? Whether to return the date in UTC (true) or local time (false)

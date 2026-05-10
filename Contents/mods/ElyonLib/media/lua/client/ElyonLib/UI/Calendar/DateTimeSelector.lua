@@ -1,20 +1,11 @@
 local DateTimeUtility = require("ElyonLib/DateTime/DateTimeUtility")
 local DateTimeModel = require("ElyonLib/DateTime/DateTimeModel")
+local ColorUtils = require("ElyonLib/ColorUtils/ColorUtils")
+
+local copyColor = ColorUtils.copy
 
 ---@class DateTimeSelector : ISPanel
 DateTimeSelector = ISPanel:derive("DateTimeSelector")
-
-local function copyColor(color)
-	if not color then
-		return nil
-	end
-	return {
-		r = color.r,
-		g = color.g,
-		b = color.b,
-		a = color.a,
-	}
-end
 
 local CONST = {
 	LAYOUT = {
@@ -94,25 +85,49 @@ local CONST = {
 	},
 }
 
----Create a new DateTimeSelector
 ---@param x number X position
 ---@param y number Y position
 ---@param width number Width
 ---@param height number Height
 ---@param useGameTime boolean? Whether to use game time
 ---@param initialValue DateTable? Optional initial date/time value
+---@param options table? Optional display settings
 ---@return DateTimeSelector
-function DateTimeSelector:new(x, y, width, height, useGameTime, initialValue)
+function DateTimeSelector:new(x, y, width, height, useGameTime, initialValue, options)
+	options = options or {}
+	if type(useGameTime) == "table" then
+		options = useGameTime
+		initialValue = options.initialValue
+		useGameTime = options.useGameTime
+	elseif
+		type(initialValue) == "table"
+		and initialValue.year == nil
+		and (
+			initialValue.showTime ~= nil
+			or initialValue.showTimezoneInfo ~= nil
+			or initialValue.showSeconds ~= nil
+			or initialValue.useGameTime ~= nil
+			or initialValue.initialValue ~= nil
+		)
+	then
+		options = initialValue
+		initialValue = options.initialValue
+	end
+
 	local o = ISPanel:new(x, y, width, height)
 	setmetatable(o, self)
 	self.__index = self
 
 	o.useGameTime = useGameTime or false
-	o.showTime = true -- whether to show time selection (hours/minutes)
-	o.showSeconds = false -- whether to show seconds selection
-	o.startOnMonday = true -- whether to start week on Monday (true) or Sunday (false)
-	o.showTimezoneInfo = not o.useGameTime -- only show timezone info for real time
-	o.use24HourFormat = true -- whether to use 24-hour format (true) or AM/PM (false)
+	o.showTime = options.showTime ~= false
+	o.showSeconds = options.showSeconds == true
+	o.startOnMonday = options.startOnMonday ~= false
+	o._timezoneInfoExplicit = options.showTimezoneInfo ~= nil
+	o.showTimezoneInfo = options.showTimezoneInfo
+	if o.showTimezoneInfo == nil then
+		o.showTimezoneInfo = not o.useGameTime and o.showTime
+	end
+	o.use24HourFormat = options.use24HourFormat ~= false
 
 	o.currentYear = nil
 	o.currentMonth = nil
@@ -170,6 +185,7 @@ function DateTimeSelector:new(x, y, width, height, useGameTime, initialValue)
 
 	o.dayButtons = {}
 	o.timeInputs = {}
+	o._childrenCreated = false
 
 	o.arrowLeftTexture = getTexture("media/ui/ArrowLeft.png")
 	o.arrowRightTexture = getTexture("media/ui/ArrowRight.png")
@@ -177,7 +193,7 @@ function DateTimeSelector:new(x, y, width, height, useGameTime, initialValue)
 	o.arrowDownTexture = getTexture("media/ui/ArrowDown.png")
 	o.arrowBackTexture = getTexture("media/ui/Back.png")
 
-	o.moveWithMouse = true
+	o.moveWithMouse = options.moveWithMouse ~= false
 
 	local optimalWidth, optimalHeight = o:calculateOptimalSize()
 	o:setWidth(optimalWidth)
@@ -200,47 +216,45 @@ function DateTimeSelector:centerOnScreen()
 	self:setY(y)
 end
 
+function DateTimeSelector:getCalendarBottomY()
+	return CONST.LAYOUT.PADDING
+		+ CONST.LAYOUT.HEADER.HEIGHT
+		+ CONST.LAYOUT.PADDING
+		+ CONST.LAYOUT.HEADER.DAY
+		+ (6 * CONST.LAYOUT.BUTTON.DAY)
+end
+
+function DateTimeSelector:getTimeY()
+	return self:getCalendarBottomY() + CONST.LAYOUT.PADDING
+end
+
+function DateTimeSelector:getTimezoneY()
+	local y = self:getCalendarBottomY() + CONST.LAYOUT.PADDING
+	if self.showTime then
+		y = y + CONST.LAYOUT.BUTTON.TIME_PICKER + CONST.LAYOUT.PADDING
+	end
+	return y
+end
+
 function DateTimeSelector:calculateOptimalSize()
 	local padX = CONST.LAYOUT.PADDING
 	local padY = CONST.LAYOUT.PADDING
 
-	local headerHeight = padY + CONST.LAYOUT.HEADER.MONTH_YEAR + CONST.LAYOUT.PADDING
-
-	local dayHeaderHeight = CONST.LAYOUT.HEADER.DAY + CONST.LAYOUT.SPACING.ITEM
-
-	local dayButtonHeight = (CONST.LAYOUT.BUTTON.DAY + CONST.LAYOUT.SPACING.ITEM) * 6
-
-	local timePickerHeight = 0
+	local totalHeight = self:getCalendarBottomY() + padY
 	if self.showTime then
-		timePickerHeight = CONST.LAYOUT.BUTTON.TIME_PICKER + CONST.LAYOUT.PADDING
+		totalHeight = totalHeight + CONST.LAYOUT.BUTTON.TIME_PICKER + padY
 	end
-
-	local timezoneHeight = 0
 	if self.showTimezoneInfo then
-		timezoneHeight = CONST.LAYOUT.HEADER.TIMEZONE_HEIGHT + CONST.LAYOUT.PADDING
+		totalHeight = totalHeight + CONST.LAYOUT.HEADER.TIMEZONE_HEIGHT + padY
 	end
+	totalHeight = totalHeight + CONST.LAYOUT.BUTTON.HEIGHT + padY
 
-	local buttonTextHeight = getTextManager():MeasureStringY(UIFont.Small, "OK")
-	local buttonHeight = buttonTextHeight + padY
-	local buttonSectionHeight = buttonHeight + padY
-
-	local totalHeight = headerHeight
-		+ dayHeaderHeight
-		+ dayButtonHeight
-		+ timePickerHeight
-		+ timezoneHeight
-		+ buttonSectionHeight
-
-	local dayLabelWidth = 0
-	local daysOfWeek = self.startOnMonday and DateTimeUtility.DAYS_OF_WEEK_MONDAY_FIRST
-		or DateTimeUtility.DAYS_OF_WEEK_SUNDAY_FIRST
-	for i = 1, #daysOfWeek do
-		local dayName = daysOfWeek[i]
-		dayLabelWidth = math.max(dayLabelWidth, getTextManager():MeasureStringX(UIFont.Small, dayName))
-	end
-
-	local dayButtonWidth = math.max(CONST.LAYOUT.BUTTON.DAY, dayLabelWidth + CONST.LAYOUT.SPACING.ITEM)
-	local calendarWidth = (dayButtonWidth + CONST.LAYOUT.SPACING.ITEM) * 7
+	local calendarWidth = CONST.LAYOUT.BUTTON.DAY * 7
+	local headerWidth = CONST.LAYOUT.BUTTON.NAV * 2
+		+ CONST.LAYOUT.SPACING.ITEM * 4
+		+ getTextManager():MeasureStringX(UIFont.Small, "September")
+		+ getTextManager():MeasureStringX(UIFont.Small, "0000")
+		+ 42
 
 	local timePickerWidth = 0
 	if self.showTime then
@@ -279,7 +293,7 @@ function DateTimeSelector:calculateOptimalSize()
 		timezoneWidth = getTextManager():MeasureStringX(UIFont.Small, tzInfo)
 	end
 
-	local contentWidth = math.max(calendarWidth, timePickerWidth, buttonSectionWidth, timezoneWidth)
+	local contentWidth = math.max(calendarWidth, headerWidth, timePickerWidth, buttonSectionWidth, timezoneWidth)
 
 	local requiredWidth = contentWidth + (padX * 2)
 
@@ -291,7 +305,6 @@ function DateTimeSelector:initialise()
 	self:createChildren()
 end
 
----Set callback for date-time selection
 ---@param target any Target object for the callback
 ---@param callback function Callback function to be called when date is selected
 function DateTimeSelector:setOnDateTimeSelected(target, callback)
@@ -299,17 +312,18 @@ function DateTimeSelector:setOnDateTimeSelected(target, callback)
 	self.callback = callback
 end
 
----Set whether to show time selection
 ---@param show boolean Whether to show time selection
 function DateTimeSelector:setShowTime(show)
 	if self.showTime == show then
 		return
 	end
 	self.showTime = show
+	if not self._timezoneInfoExplicit then
+		self.showTimezoneInfo = not self.useGameTime and self.showTime
+	end
 	self:recreateChildren()
 end
 
----Set whether to show seconds
 ---@param show boolean Whether to show seconds
 function DateTimeSelector:setShowSeconds(show)
 	if self.showSeconds == show then
@@ -321,7 +335,6 @@ function DateTimeSelector:setShowSeconds(show)
 	end
 end
 
----Set whether to use 24-hour format
 ---@param use24Hour boolean Whether to use 24-hour format
 function DateTimeSelector:setUse24HourFormat(use24Hour)
 	if self.use24HourFormat == use24Hour then
@@ -355,7 +368,6 @@ function DateTimeSelector:setUse24HourFormat(use24Hour)
 	end
 end
 
----Set whether the week starts on Monday
 ---@param startOnMonday boolean Whether the week starts on Monday
 function DateTimeSelector:setStartOnMonday(startOnMonday)
 	if self.startOnMonday == startOnMonday then
@@ -365,9 +377,9 @@ function DateTimeSelector:setStartOnMonday(startOnMonday)
 	self:refreshCalendar()
 end
 
----Set whether to show timezone information
 ---@param show boolean Whether to show timezone information
 function DateTimeSelector:setShowTimezoneInfo(show)
+	self._timezoneInfoExplicit = true
 	if self.showTimezoneInfo == show then
 		return
 	end
@@ -375,7 +387,6 @@ function DateTimeSelector:setShowTimezoneInfo(show)
 	self:recreateChildren()
 end
 
----Set the date model
 ---@param dateModel DateTimeModel The date model to use
 function DateTimeSelector:setDateModel(dateModel)
 	if not dateModel then
@@ -410,6 +421,13 @@ function DateTimeSelector:setDateModel(dateModel)
 end
 
 function DateTimeSelector:recreateChildren()
+	if not self._childrenCreated then
+		local optimalWidth, optimalHeight = self:calculateOptimalSize()
+		self:setWidth(optimalWidth)
+		self:setHeight(optimalHeight)
+		return
+	end
+
 	self:clearChildren()
 
 	local optimalWidth, optimalHeight = self:calculateOptimalSize()
@@ -420,6 +438,23 @@ function DateTimeSelector:recreateChildren()
 end
 
 function DateTimeSelector:createChildren()
+	if self._childrenCreated then
+		self:clearChildren()
+	end
+
+	self._childrenCreated = true
+	self.dayButtons = {}
+	self.timeInputs = {}
+	self.headerBg = nil
+	self.prevMonthBtn = nil
+	self.nextMonthBtn = nil
+	self.monthSelector = nil
+	self.yearSelector = nil
+	self.timeContainer = nil
+	self.tzLabel = nil
+	self.okButton = nil
+	self.cancelButton = nil
+
 	self:createHeader()
 	self:createDayHeaders()
 	self:createCalendarGrid()
@@ -641,20 +676,14 @@ function DateTimeSelector:createCalendarGrid()
 			dayButton.day = 0
 			dayButton.isCurrentMonth = false
 
-			table.insert(self.dayButtons, dayButton)
+			self.dayButtons[#self.dayButtons + 1] = dayButton
 			self:addChild(dayButton)
 		end
 	end
 end
 
 function DateTimeSelector:createTimePicker()
-	local timeY = CONST.LAYOUT.PADDING
-		+ CONST.LAYOUT.HEADER.HEIGHT
-		+ CONST.LAYOUT.PADDING
-		+ CONST.LAYOUT.HEADER.DAY
-		+ (6 * CONST.LAYOUT.BUTTON.DAY)
-		+ CONST.LAYOUT.PADDING
-
+	local timeY = self:getTimeY()
 	local timeWidth = self.width - (CONST.LAYOUT.PADDING * 2)
 	self.timeContainer = ISPanel:new(CONST.LAYOUT.PADDING, timeY, timeWidth, CONST.LAYOUT.BUTTON.TIME_PICKER)
 	self.timeContainer:initialise()
@@ -679,7 +708,7 @@ function DateTimeSelector:createTimePicker()
 
 	local labelWidth = getTextManager():MeasureStringX(UIFont.Small, "Time:")
 	local startX = (CONST.LAYOUT.SPACING.ITEM * 3) + labelWidth
-	local inputWidth = 50 -- Increased width
+	local inputWidth = 50
 	local inputHeight = CONST.LAYOUT.ENTRY.TIME_HEIGHT
 	local inputY = (CONST.LAYOUT.BUTTON.TIME_PICKER - inputHeight) / 2
 	local separatorWidth = 15
@@ -780,7 +809,6 @@ function DateTimeSelector:createTimePicker()
 	end
 end
 
----Create a custom time input component (hour/minute/second)
 ---@param type string The type of input ("hour", "minute", "second")
 ---@param x number X position
 ---@param y number Y position
@@ -870,26 +898,16 @@ function DateTimeSelector:createCustomTimeInput(type, x, y, width, height, initi
 		return true
 	end
 
-	table.insert(self.timeInputs, {
+	self.timeInputs[#self.timeInputs + 1] = {
 		container = container,
 		type = type,
-	})
+	}
 
 	return container
 end
 
 function DateTimeSelector:createTimezoneInfo()
-	local timeY = CONST.LAYOUT.PADDING
-		+ CONST.LAYOUT.HEADER.HEIGHT
-		+ CONST.LAYOUT.PADDING
-		+ CONST.LAYOUT.HEADER.DAY
-		+ (6 * CONST.LAYOUT.BUTTON.DAY)
-		+ CONST.LAYOUT.PADDING
-	local tzY = timeY + CONST.LAYOUT.BUTTON.TIME_PICKER + CONST.LAYOUT.PADDING
-	if not self.showTime then
-		tzY = timeY
-	end
-
+	local tzY = self:getTimezoneY()
 	local tzHeight = CONST.LAYOUT.HEADER.TIMEZONE_HEIGHT
 
 	local offset = self.dateModel:getTimezoneOffset()
@@ -1010,7 +1028,19 @@ function DateTimeSelector:onNextMonth()
 	self:refreshCalendar()
 end
 
----Handle day selection
+function DateTimeSelector:getSelectedHour24()
+	if self.use24HourFormat then
+		return self.selectedHour
+	end
+	if self.selectedAMPM == "PM" and self.selectedHour < 12 then
+		return self.selectedHour + 12
+	end
+	if self.selectedAMPM == "AM" and self.selectedHour == 12 then
+		return 0
+	end
+	return self.selectedHour
+end
+
 ---@param button ISButton The clicked day button
 function DateTimeSelector:onDaySelected(button)
 	if not button or button.day <= 0 then
@@ -1037,7 +1067,6 @@ function DateTimeSelector:onDaySelected(button)
 	self:refreshCalendar()
 end
 
----Handle time input change
 ---@param type string The type of time input changed ("hour", "minute", "second")
 ---@param delta number The amount to change the value by
 function DateTimeSelector:onTimeChange(type, delta)
@@ -1073,13 +1102,7 @@ function DateTimeSelector:onTimeChange(type, delta)
 
 			self.selectedHour = hour
 
-			if self.selectedAMPM == "PM" and hour < 12 then
-				date.hour = hour + 12
-			elseif self.selectedAMPM == "AM" and hour == 12 then
-				date.hour = 0
-			else
-				date.hour = hour
-			end
+			date.hour = self:getSelectedHour24()
 		end
 	elseif type == "minute" then
 		local minute = self.selectedMinute + delta
@@ -1118,15 +1141,7 @@ function DateTimeSelector:onAMPMSelected()
 			self.selectedAMPM = selectedText
 
 			local date = self.dateModel:getLocalDate()
-			local hour = self.selectedHour
-
-			if self.selectedAMPM == "PM" and hour < 12 then
-				date.hour = hour + 12
-			elseif self.selectedAMPM == "AM" and hour == 12 then
-				date.hour = 0
-			else
-				date.hour = hour
-			end
+			date.hour = self:getSelectedHour24()
 
 			self.dateModel:setDate(date)
 		end
@@ -1139,7 +1154,7 @@ function DateTimeSelector:onOK()
 		localDate.year = self.currentYear
 		localDate.month = self.currentMonth
 		localDate.day = self.selectedDay
-		localDate.hour = self.selectedHour
+		localDate.hour = self:getSelectedHour24()
 		localDate.min = self.selectedMinute
 		localDate.second = self.selectedSecond
 
@@ -1160,7 +1175,8 @@ function DateTimeSelector:onCancel()
 end
 
 function DateTimeSelector:updateTimeDisplay()
-	for i, input in ipairs(self.timeInputs) do
+	for i = 1, #self.timeInputs do
+		local input = self.timeInputs[i]
 		local value = 0
 
 		if input.type == "hour" then
@@ -1177,7 +1193,6 @@ function DateTimeSelector:updateTimeDisplay()
 	end
 end
 
----Check if a date is today
 ---@param year number Year
 ---@param month number Month (1-12)
 ---@param day number Day
@@ -1220,7 +1235,8 @@ function DateTimeSelector:refreshCalendar()
 	end
 	local daysInPrevMonth = DateTimeUtility.getDaysInMonth(prevMonth, prevYear)
 
-	for i, button in ipairs(self.dayButtons) do
+	for i = 1, #self.dayButtons do
+		local button = self.dayButtons[i]
 		button:setTitle("")
 		button.day = 0
 		button.isCurrentMonth = false
@@ -1278,11 +1294,11 @@ function DateTimeSelector:refreshCalendar()
 	end
 end
 
----Mouse wheel handler
 ---@param del number Wheel delta
 ---@return boolean handled Whether the event was handled
 function DateTimeSelector:onMouseWheel(del)
-	for _, input in ipairs(self.timeInputs) do
+	for i = 1, #self.timeInputs do
+		local input = self.timeInputs[i]
 		local x = self:getMouseX()
 		local y = self:getMouseY()
 

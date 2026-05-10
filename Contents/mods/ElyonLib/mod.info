@@ -1,7 +1,6 @@
 name=Elyon Lib
 poster=poster.png
 id=ElyonLib
-description=This is a utility framework that provides essential tools and functions. It's designed to streamline common development tasks and provide a solid foundation for other mods.
-description=As an end user, you only need to install Elyon Lib if a mod you use requires it.
+description=Build 41 shared library: logging, timers, JSON/files, tables, net helpers, rewards, datetime, colours, sprites, UI theme/layout, MenuDock launcher, HudNotify toasts - install only if another mod requires it; load ElyonLib before dependent mods.
 tags=Build 41,Misc,Multiplayer,Interface
 versionMin=41.0

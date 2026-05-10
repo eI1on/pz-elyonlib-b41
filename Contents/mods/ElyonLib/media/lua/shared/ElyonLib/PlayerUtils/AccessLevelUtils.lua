@@ -1,4 +1,4 @@
----@alias ElyonLibAccessLevel "None"|"Observer"|"GM"|"Overseer"|"Moderator"|"Admin"
+---@alias AccessLevels "None"|"Observer"|"GM"|"Overseer"|"Moderator"|"Admin"
 
 local AccessLevelUtils = {}
 
@@ -12,7 +12,7 @@ AccessLevelUtils.ORDER = {
 }
 
 ---@param accessLevel string|nil
----@return ElyonLibAccessLevel|nil
+---@return AccessLevels|nil
 function AccessLevelUtils.normalize(accessLevel)
 	accessLevel = tostring(accessLevel or "")
 	accessLevel = string.gsub(accessLevel, "^%s*(.-)%s*$", "%1")
@@ -50,7 +50,7 @@ end
 
 ---@param playerNum integer|nil
 ---@param playerObj IsoPlayer|nil
----@return ElyonLibAccessLevel
+---@return AccessLevels
 function AccessLevelUtils.getPlayerAccessLevel(playerNum, playerObj)
 	if not playerObj then
 		playerObj = AccessLevelUtils.getPlayer(playerNum)
@@ -106,6 +106,27 @@ end
 ---@return boolean
 function AccessLevelUtils.isPlayerAtLeast(playerNum, minimumAccessLevel, playerObj)
 	return AccessLevelUtils.isAtLeast(AccessLevelUtils.getPlayerAccessLevel(playerNum, playerObj), minimumAccessLevel)
+end
+
+--- Returns true when the given player object has Admin access (or any higher level).
+--- In singleplayer, always returns true.
+--- When playerObj is nil, falls back to the client-side isAdmin() / getAccessLevel() globals.
+---@param playerObj IsoPlayer|nil
+---@return boolean
+function AccessLevelUtils.hasAdminAccess(playerObj)
+	if AccessLevelUtils.isSinglePlayer() then
+		return true
+	end
+
+	if playerObj and playerObj.getAccessLevel then
+		return AccessLevelUtils.normalize(playerObj:getAccessLevel()) == "Admin"
+	end
+
+	if isAdmin and isAdmin() then
+		return true
+	end
+
+	return AccessLevelUtils.normalize(getAccessLevel()) == "Admin" or false
 end
 
 return AccessLevelUtils

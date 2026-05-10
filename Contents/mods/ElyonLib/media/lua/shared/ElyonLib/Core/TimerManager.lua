@@ -19,7 +19,9 @@ function Timer:new(callback, interval, loop)
 	return newTimer
 end
 
+---@class TimerManager
 local TimerManager = {}
+TimerManager.__index = TimerManager
 
 ---@param callback function The function to call
 ---@param interval number The interval in milliseconds
@@ -56,7 +58,7 @@ function TimerManager:update()
 	local currentTime = getTimeInMillis()
 	for id, timer in pairs(timers) do
 		if currentTime >= timer.nextTrigger then
-			local success, err = pcall(timer.callback)
+			timer.callback()
 			if timer.loop then
 				timer.nextTrigger = timer.nextTrigger + timer.interval
 				while currentTime >= timer.nextTrigger do

@@ -1,6 +1,6 @@
-require "ISUI/ISPanel"
-require "ISUI/ISButton"
-require "ISUI/ISToolTip"
+require("ISUI/ISPanel")
+require("ISUI/ISButton")
+require("ISUI/ISToolTip")
 
 local MathUtils = require("ElyonLib/MathUtils/MathUtils")
 local AccessLevelUtils = require("ElyonLib/PlayerUtils/AccessLevelUtils")
@@ -10,26 +10,38 @@ local UIUtils = require("ElyonLib/UI/Utils/UIUtils")
 local clamp = MathUtils.clamp
 local lerp = MathUtils.lerp
 local easeOut = MathUtils.easeOutCubic
+local frameSeconds = UIUtils.frameSeconds
 local frameStep = UIUtils.frameStep
 local isScreenPointInElement = UIUtils.isScreenPointInElement
-local fitTextToWidth = TextUtils.fitToWidth
 
 local DOCK = {
-	PUCK_SIZE = 40,
-	DOCK_VISIBLE = 20,
-	HOVER_VISIBLE = 28,
-	MAGNET_RANGE = 96,
+	PUCK_SIZE = 44,
+	DOCK_VISIBLE = 22,
+	HOVER_VISIBLE = 32,
+	MAGNET_RANGE = 112,
 	DRAG_THRESHOLD = 4,
 	EDGE_PADDING = 8,
-	RAIL_GAP = 5,
-	RAIL_PADDING = 4,
-	RAIL_SLOT = 40,
-	RAIL_GAP_Y = 4,
+	RAIL_GAP = 8,
+	RAIL_PADDING = 5,
+	RAIL_SLOT = 42,
+	RAIL_TEXT_MAX = 220,
+	RAIL_BUTTON_EXPAND = 12,
+	RAIL_BUTTON_EXPAND_Y = 7,
+	RAIL_ICON_SIZE = 27,
+	RAIL_ICON_HOVER_SIZE = 36,
+	RAIL_GAP_Y = 14,
 	RAIL_MAX_VISIBLE = 8,
-	RAIL_SCROLL_HINT = 10,
-	EXPAND_ANIM_STEP = 0.2,
-	PUCK_ANIM_STEP = 0.18,
+	RAIL_SCROLL_HINT = 14,
+	BUTTON_HOVER_ANIM_STEP = 0.22,
+	EXPAND_ANIM_STEP = 0.18,
+	HOVER_ANIM_STEP = 0.18,
+	PUCK_ANIM_STEP = 0.12,
+	SNAP_DURATION = 0.28,
 	DISPLAY_NAME = "Menu Dock",
+	--- Default diameter (px) for entry.badge texture + text overlays on rail buttons
+	BADGE_DIAMETER = 20,
+	BADGE_OFFSET_X = 1,
+	BADGE_OFFSET_Y = 1,
 }
 
 local function getEntryLabel(entry)
@@ -65,6 +77,22 @@ end
 ---@field allowSinglePlayer boolean|nil When true, minimumAccessLevel is only enforced in multiplayer.
 ---@field visible boolean|nil Set to false to hide this entry.
 ---@field visibleWhen MenuDockVisibilityCallback|MenuDockTargetVisibilityCallback|nil Custom visibility predicate.
+---@field badge MenuDockBadge|nil Optional overlay (e.g. notification count). Prefer MenuDock.setEntryBadge(id, ...) to mutate at runtime.
+
+---@class MenuDockBadge
+---@field texture string|nil Texture path relative to mod, e.g. "media/ui/badge.png" (passed to getTexture).
+---@field textureObj Texture|nil Pre-loaded texture; wins over texture.
+---@field text string|number|nil|fun(entry: MenuDockEntry): string|nil Label drawn centered on the badge.
+---@field visible boolean|fun(entry: MenuDockEntry): boolean|nil When false, badge is skipped.
+---@field size number|nil Diameter in pixels (square draw). Defaults to DOCK.BADGE_DIAMETER.
+---@field anchor string|nil "topleft" | "topright" within the button's visual bounds. Default "topleft".
+---@field offsetX number|nil Nudges badge from anchor edge (default BADGE_OFFSET_X).
+---@field offsetY number|nil
+---@field hideWhenEmpty boolean|nil Hide when resolved text is "" (default true).
+---@field hideWhenZero boolean|nil Hide when text parses as zero (default true).
+---@field maxBeforePlus number|nil If set and tonumber(text) exceeds this, displays "<maxBeforePlus>+".
+---@field font userdata|nil UIFont enum; picks by width when omitted.
+---@field textColor { r: number, g: number, b: number }|nil Default white.
 
 ---@class MenuDock : ISPanel
 MenuDock = ISPanel:derive("MenuDock")
@@ -94,7 +122,8 @@ function MenuDock.isEntryVisible(entry, playerNum)
 	playerNum = playerNum or 0
 	local playerObj = AccessLevelUtils.getPlayer(playerNum)
 	local minimumAccessLevel = getEntryMinimumAccessLevel(entry)
-	local shouldCheckAccessLevel = minimumAccessLevel and not (entry.allowSinglePlayer and AccessLevelUtils.isSinglePlayer())
+	local shouldCheckAccessLevel = minimumAccessLevel
+		and not (entry.allowSinglePlayer and AccessLevelUtils.isSinglePlayer())
 
 	if shouldCheckAccessLevel and not AccessLevelUtils.isPlayerAtLeast(playerNum, minimumAccessLevel, playerObj) then
 		return false
@@ -122,28 +151,235 @@ function MenuDock.getVisibleEntries(playerNum)
 	return visibleEntries
 end
 
+--- Prefer the largest font that still fits inside the badge width.
+local function pickBadgeFont(displayText, maxWidth)
+	displayText = tostring(displayText)
+	local fonts = {}
+	local push = function(f)
+		if f then
+			fonts[#fonts + 1] = f
+		end
+	end
+
+	push(UIFont and UIFont.Small)
+	push(UIFont and UIFont.Medium)
+
+	if #fonts == 0 then
+		return UIFont.Small
+	end
+
+	local tm = getTextManager()
+	table.sort(fonts, function(a, b)
+		return tm:getFontHeight(a) < tm:getFontHeight(b)
+	end)
+
+	for i = #fonts, 1, -1 do
+		local font = fonts[i]
+		if tm:MeasureStringX(font, displayText) <= maxWidth then
+			return font
+		end
+	end
+
+	return fonts[1]
+end
+
+--- Called from rail buttons - draws entry.badge (texture + centered label) without mod-specific branching.
+function MenuDock.drawBadgeOnRailButton(btn, visualX, visualY, visualWidth, visualHeight, fgAlpha)
+	if not btn or not btn.entry or not btn.entry.badge then
+		return
+	end
+
+	local entry = btn.entry
+	local b = entry.badge
+
+	local vis = b.visible
+	if vis == false then
+		return
+	end
+	if type(vis) == "function" and not vis(entry) then
+		return
+	end
+
+	local rawText = b.text
+	if type(rawText) == "function" then
+		rawText = rawText(entry)
+	end
+	if rawText == nil then
+		rawText = ""
+	else
+		rawText = tostring(rawText)
+	end
+
+	local numValBefore = tonumber(rawText)
+	local maxBp = tonumber(b.maxBeforePlus)
+	if maxBp and numValBefore and numValBefore > maxBp then
+		rawText = tostring(math.floor(maxBp)) .. "+"
+	end
+
+	local hideEmpty = b.hideWhenEmpty ~= false
+
+	local hideZero = b.hideWhenZero ~= false
+	if hideZero then
+		if rawText == "0" then
+			return
+		end
+		if numValBefore ~= nil and numValBefore <= 0 then
+			return
+		end
+	end
+
+	if hideEmpty and rawText == "" then
+		return
+	end
+
+	local tex = b.textureObj
+	if not tex and b.texture then
+		tex = getTexture(b.texture)
+		b.textureObj = tex
+	end
+
+	local dia = tonumber(b.size) or DOCK.BADGE_DIAMETER
+	local ox = tonumber(b.offsetX)
+	if ox == nil then
+		ox = DOCK.BADGE_OFFSET_X
+	end
+	local oy = tonumber(b.offsetY)
+	if oy == nil then
+		oy = DOCK.BADGE_OFFSET_Y
+	end
+
+	local anchor = tostring(b.anchor or "topleft"):lower()
+	local bx
+	local by
+	if anchor == "topright" then
+		bx = visualX + visualWidth - dia - ox
+		by = visualY + oy
+	else
+		bx = visualX + ox
+		by = visualY + oy
+	end
+
+	local railA = btn.parent and btn.parent.openFraction or 1
+	local ba = fgAlpha * railA * (tonumber(b.alpha) or 1)
+
+	if tex then
+		btn:drawTextureScaled(tex, bx, by, dia, dia, ba, 1, 1, 1)
+	else
+		btn:drawRect(bx + 1, by + 1, dia - 2, dia - 2, 0.35 * ba, 0.45, 0.05, 0.05)
+		btn:drawRect(bx, by, dia, dia, 0.88 * ba, 0.85, 0.12, 0.14)
+	end
+
+	local maxTxtW = dia * 0.74
+	local display = rawText
+	local font = b.font or pickBadgeFont(display, maxTxtW)
+	if TextUtils.measureWidth(font, display) > maxTxtW then
+		display = TextUtils.trimToWidth(font, display, maxTxtW, "") or ""
+	end
+
+	if hideEmpty and display == "" then
+		return
+	end
+
+	local tm = getTextManager()
+	local tw = tm:MeasureStringX(font, display)
+	-- ISInventoryPage / ISButton use getFontHeight for vertical row alignment; MeasureStringY is often
+	-- taller than the visible ink for digit-only strings (extra descender/leading in the line box),
+	-- which makes naive (dia - th)/2 centering look too low.
+	local lineH = tm.getFontHeight and tm:getFontHeight(font) or tm:MeasureStringY(font, display)
+	if not lineH or lineH < 1 then
+		lineH = tm:MeasureStringY(font, display)
+	end
+	local leftX = bx + (dia - tw) / 2
+	local topY = by + (dia - lineH) / 2
+	-- Approximate optical centering: digits sit high in the em box; shift up ~0.11×lineH, capped vs badge diameter.
+	local opticalUp = clamp(math.floor(lineH * 11 / 100 + 0.5), 0, math.max(0, math.floor(dia * 15 / 100)))
+	topY = topY - opticalUp
+	local tr, tg, tb = 1, 1, 1
+	local tc = b.textColor
+	if type(tc) == "table" then
+		tr = tonumber(tc.r) or tr
+		tg = tonumber(tc.g) or tg
+		tb = tonumber(tc.b) or tb
+	end
+
+	btn:drawText(display, leftX, topY, tr, tg, tb, ba, font)
+end
+
 ---@class MenuDockRail : ISPanel
 MenuDockRail = ISPanel:derive("MenuDockRail")
 
 ---@class MenuDockButton : ISButton
 MenuDockButton = ISButton:derive("MenuDockButton")
 
-function MenuDockButton:render()
-	ISButton.render(self)
+function MenuDockButton:getVisualBounds()
+	local hoverProgress = self.hoverProgress or 0
+	local baseWidth = self.baseWidth or self.width
+	local baseHeight = self.baseHeight or self.height
+	local growX = DOCK.RAIL_BUTTON_EXPAND * hoverProgress
+	local growY = DOCK.RAIL_BUTTON_EXPAND_Y * hoverProgress
+	local x = DOCK.RAIL_BUTTON_EXPAND - growX
+	local y = DOCK.RAIL_BUTTON_EXPAND_Y - growY
 
-	if self.image or not self.entryText or self.entryText == "" then
-		return
+	return x, y, baseWidth + (growX * 2), baseHeight + (growY * 2), hoverProgress
+end
+
+function MenuDockButton:update()
+	if ISButton.update then
+		ISButton.update(self)
 	end
 
-	local font = self.entryTextFont or UIFont.Small
-	local height = getTextManager():MeasureStringY(font, self.entryText)
-	local y = (self.height / 2) - (height / 2)
-	local alpha = self.enable and self.textColor.a or 0.45
-	local r = self.enable and self.textColor.r or 0.45
-	local g = self.enable and self.textColor.g or 0.45
-	local b = self.enable and self.textColor.b or 0.45
+	local targetHover = (self.enable and self:isMouseOver()) and 1 or 0
+	self.hoverProgress = self.hoverProgress
+		+ ((targetHover - self.hoverProgress) * frameStep(DOCK.BUTTON_HOVER_ANIM_STEP))
 
-	self:drawTextCentre(self.entryText, self.width / 2, y, r, g, b, alpha, font)
+	if math.abs(targetHover - self.hoverProgress) < 0.01 then
+		self.hoverProgress = targetHover
+	end
+end
+
+function MenuDockButton:prerender()
+	local visualX, visualY, visualWidth, visualHeight, hoverProgress = self:getVisualBounds()
+	local railAlpha = self.parent and self.parent.openFraction or 1
+	local alpha = (0.64 + (0.22 * hoverProgress)) * railAlpha
+	local borderAlpha = (0.20 + (0.38 * hoverProgress)) * railAlpha
+	local color = lerp(0.08, 0.22, hoverProgress)
+
+	self:drawRect(visualX + 1, visualY + 2, visualWidth, visualHeight, 0.16 * railAlpha, 0, 0, 0)
+	self:drawRect(visualX, visualY, visualWidth, visualHeight, alpha, color, color, color)
+	self:drawRectBorder(visualX, visualY, visualWidth, visualHeight, borderAlpha, 0.72, 0.72, 0.72)
+end
+
+function MenuDockButton:render()
+	local visualX, visualY, visualWidth, visualHeight, hoverProgress = self:getVisualBounds()
+	local centerX = visualX + (visualWidth / 2)
+	local centerY = visualY + (visualHeight / 2)
+	local alpha = self.enable and (0.78 + (0.22 * hoverProgress)) or 0.35
+
+	if self.image then
+		local imageSize = lerp(DOCK.RAIL_ICON_SIZE, DOCK.RAIL_ICON_HOVER_SIZE, hoverProgress)
+		self:drawTextureScaled(
+			self.image,
+			centerX - (imageSize / 2),
+			centerY - (imageSize / 2),
+			imageSize,
+			imageSize,
+			alpha,
+			1,
+			1,
+			1
+		)
+	elseif self.entryText and self.entryText ~= "" then
+		local font = self.entryTextFont or UIFont.Small
+		local height = getTextManager():MeasureStringY(font, self.entryText)
+		local y = centerY - (height / 2)
+		local r = self.enable and self.textColor.r or 0.45
+		local g = self.enable and self.textColor.g or 0.45
+		local b = self.enable and self.textColor.b or 0.45
+
+		self:drawTextCentre(self.entryText, centerX, y, r, g, b, alpha, font)
+	end
+
+	MenuDock.drawBadgeOnRailButton(self, visualX, visualY, visualWidth, visualHeight, alpha)
 end
 
 function MenuDockButton:new(x, y, width, height, target, onclick)
@@ -152,6 +388,9 @@ function MenuDockButton:new(x, y, width, height, target, onclick)
 	self.__index = self
 	o.entryText = nil
 	o.entryTextFont = UIFont.Small
+	o.baseWidth = width
+	o.baseHeight = height
+	o.hoverProgress = 0
 	return o
 end
 
@@ -177,18 +416,21 @@ end
 
 function MenuDockRail:getButtonStartY()
 	if self:hasOverflow() then
-		return DOCK.RAIL_PADDING + DOCK.RAIL_SCROLL_HINT
+		return DOCK.RAIL_PADDING + DOCK.RAIL_SCROLL_HINT + DOCK.RAIL_BUTTON_EXPAND_Y
 	end
-	return DOCK.RAIL_PADDING
+	return DOCK.RAIL_PADDING + DOCK.RAIL_BUTTON_EXPAND_Y
 end
 
 function MenuDockRail:calculateHeight()
 	local visibleCount = self:getVisibleCount()
 	if visibleCount <= 0 then
-		return DOCK.RAIL_PADDING * 2 + DOCK.RAIL_SLOT
+		return DOCK.RAIL_PADDING * 2 + DOCK.RAIL_SLOT + (DOCK.RAIL_BUTTON_EXPAND_Y * 2)
 	end
 
-	local height = (DOCK.RAIL_PADDING * 2) + (visibleCount * DOCK.RAIL_SLOT) + ((visibleCount - 1) * DOCK.RAIL_GAP_Y)
+	local height = (DOCK.RAIL_PADDING * 2)
+		+ (DOCK.RAIL_BUTTON_EXPAND_Y * 2)
+		+ (visibleCount * DOCK.RAIL_SLOT)
+		+ ((visibleCount - 1) * DOCK.RAIL_GAP_Y)
 	if self:hasOverflow() then
 		height = height + (DOCK.RAIL_SCROLL_HINT * 2)
 	end
@@ -214,24 +456,56 @@ function MenuDockRail:refreshButtons()
 	self:setHeight(self:calculateHeight())
 
 	local y = self:getButtonStartY()
+	local buttonX = DOCK.RAIL_PADDING
+	local font = UIFont.Small
+	local tm = getTextManager()
+
+	local textSlot = DOCK.RAIL_SLOT
+	for idx = 1, visibleCount do
+		local entry = entries[self.scrollIndex + idx - 1]
+		if entry and not entry.texture then
+			local label = getEntryLabel(entry) or ""
+			local lw = tm:MeasureStringX(font, label)
+			textSlot = math.max(textSlot, lw + 12)
+		end
+	end
+	textSlot = clamp(textSlot, DOCK.RAIL_SLOT, DOCK.RAIL_TEXT_MAX)
+
+	local newRailW = DOCK.RAIL_PADDING * 2 + textSlot + (DOCK.RAIL_BUTTON_EXPAND * 2)
+	if self:getWidth() ~= newRailW then
+		self:setWidth(newRailW)
+		if self.owner and self.owner.setExpanded and self.owner.expanded then
+			self:setOpenFraction(self.openFraction or 1)
+		end
+	end
+
+	local buttonWidth = textSlot + (DOCK.RAIL_BUTTON_EXPAND * 2)
+	local buttonHeight = DOCK.RAIL_SLOT + (DOCK.RAIL_BUTTON_EXPAND_Y * 2)
 	for i = 1, visibleCount do
 		local entry = entries[self.scrollIndex + i - 1]
 		if entry then
-			local button = MenuDockButton:new(DOCK.RAIL_PADDING, y, DOCK.RAIL_SLOT, DOCK.RAIL_SLOT, self, MenuDockRail.onEntryButton)
+			local button = MenuDockButton:new(
+				buttonX,
+				y - DOCK.RAIL_BUTTON_EXPAND_Y,
+				buttonWidth,
+				buttonHeight,
+				self,
+				MenuDockRail.onEntryButton
+			)
 			button:initialise()
 			button.entry = entry
-			button:setDisplayBackground(true)
-			button.backgroundColor = { r = 0.08, g = 0.08, b = 0.08, a = 0.72 }
-			button.backgroundColorMouseOver = { r = 0.22, g = 0.24, b = 0.25, a = 0.92 }
-			button.borderColor = { r = 0.72, g = 0.72, b = 0.72, a = 0.45 }
+			button.baseWidth = textSlot
+			button.baseHeight = DOCK.RAIL_SLOT
+			button:setDisplayBackground(false)
+			button.borderColor = { r = 0, g = 0, b = 0, a = 0 }
+			button.textColor = { r = 0.90, g = 0.90, b = 0.90, a = 1 }
 			button.textureColor = { r = 1, g = 1, b = 1, a = 1 }
 			button:setTooltip(entry.title or entry.id or "Menu")
 
 			if entry.texture then
 				button:setImage(entry.texture)
-				button:forceImageSize(30, 30)
 			else
-				button.entryText = fitTextToWidth(getEntryLabel(entry), UIFont.Small, DOCK.RAIL_SLOT - 8)
+				button.entryText = getEntryLabel(entry)
 			end
 
 			self:addChild(button)
@@ -264,21 +538,52 @@ function MenuDockRail:onEntryButton(button)
 	end
 end
 
+function MenuDockRail:setScrollIndex(index)
+	local visibleCount = self:getVisibleCount()
+	local maxScroll = math.max(1, self:getEntryCount() - visibleCount + 1)
+	local nextIndex = clamp(index, 1, maxScroll)
+
+	if nextIndex == self.scrollIndex then
+		return false
+	end
+
+	self.scrollIndex = nextIndex
+	self:refreshButtons()
+	return true
+end
+
 function MenuDockRail:onMouseWheel(del)
 	if not self:hasOverflow() then
 		return false
 	end
 
-	local visibleCount = self:getVisibleCount()
-	local maxScroll = math.max(1, self:getEntryCount() - visibleCount + 1)
 	local direction = del > 0 and 1 or -1
-	local nextIndex = clamp((self.scrollIndex or 1) + direction, 1, maxScroll)
+	self:setScrollIndex((self.scrollIndex or 1) + direction)
 
-	if nextIndex ~= self.scrollIndex then
-		self.scrollIndex = nextIndex
-		self:refreshButtons()
+	return true
+end
+
+function MenuDockRail:onMouseDown(x, y)
+	if self:hasOverflow() then
+		local arrowBottom = DOCK.RAIL_PADDING + DOCK.RAIL_SCROLL_HINT
+		local arrowTop = self.height - DOCK.RAIL_PADDING - DOCK.RAIL_SCROLL_HINT
+		local canScrollUp = self.scrollIndex > 1
+		local canScrollDown = self.scrollIndex + self:getVisibleCount() - 1 < self:getEntryCount()
+
+		if canScrollUp and y <= arrowBottom then
+			self:setScrollIndex((self.scrollIndex or 1) - 1)
+			return true
+		end
+
+		if canScrollDown and y >= arrowTop then
+			self:setScrollIndex((self.scrollIndex or 1) + 1)
+			return true
+		end
 	end
 
+	if self.owner then
+		self.owner:setExpanded(false)
+	end
 	return true
 end
 
@@ -311,28 +616,43 @@ end
 function MenuDockRail:prerender()
 	self:setAlwaysOnTop(true)
 
-	local alpha = 0.82 * (self.openFraction or 1)
-	self:drawRect(0, 0, self.width, self.height, alpha, 0.05, 0.05, 0.05)
-	self:drawRectBorder(0, 0, self.width, self.height, 0.55 * (self.openFraction or 1), 0.72, 0.72, 0.72)
-
+	local alpha = self.openFraction or 1
 	local entryCount = self:getEntryCount()
 
 	if entryCount <= 0 then
-		self:drawTextCentre("...", self.width / 2, (self.height / 2) - 6, 0.8, 0.8, 0.8, alpha, UIFont.Small)
+		local emptySize = DOCK.RAIL_SLOT
+		local emptyX = (self.width - emptySize) / 2
+		local emptyY = (self.height - emptySize) / 2
+		self:drawRect(emptyX + 1, emptyY + 2, emptySize, emptySize, 0.12 * alpha, 0, 0, 0)
+		self:drawRect(emptyX, emptyY, emptySize, emptySize, 0.45 * alpha, 0.05, 0.05, 0.05)
+		self:drawRectBorder(emptyX, emptyY, emptySize, emptySize, 0.24 * alpha, 0.72, 0.72, 0.72)
+		self:drawTextCentre("...", self.width / 2, (self.height / 2) - 6, 0.82, 0.82, 0.82, alpha, UIFont.Small)
 	elseif self:hasOverflow() then
+		local arrowWidth = 28
+		local arrowHeight = DOCK.RAIL_SCROLL_HINT
+		local arrowX = (self.width - arrowWidth) / 2
+
 		if self.scrollIndex > 1 then
-			self:drawTextCentre("^", self.width / 2, 0, 0.85, 0.85, 0.85, alpha, UIFont.Small)
+			local arrowY = DOCK.RAIL_PADDING
+			self:drawRect(arrowX + 1, arrowY + 1, arrowWidth, arrowHeight, 0.12 * alpha, 0, 0, 0)
+			self:drawRect(arrowX, arrowY, arrowWidth, arrowHeight, 0.46 * alpha, 0.05, 0.05, 0.05)
+			self:drawRectBorder(arrowX, arrowY, arrowWidth, arrowHeight, 0.24 * alpha, 0.72, 0.72, 0.72)
+			self:drawTextCentre("^", self.width / 2, arrowY - 1, 0.85, 0.85, 0.85, alpha, UIFont.Small)
 		end
 
 		if self.scrollIndex + self:getVisibleCount() - 1 < entryCount then
-			self:drawTextCentre("v", self.width / 2, self.height - DOCK.RAIL_SCROLL_HINT, 0.85, 0.85, 0.85, alpha, UIFont.Small)
+			local arrowY = self.height - DOCK.RAIL_PADDING - arrowHeight
+			self:drawRect(arrowX + 1, arrowY + 1, arrowWidth, arrowHeight, 0.12 * alpha, 0, 0, 0)
+			self:drawRect(arrowX, arrowY, arrowWidth, arrowHeight, 0.46 * alpha, 0.05, 0.05, 0.05)
+			self:drawRectBorder(arrowX, arrowY, arrowWidth, arrowHeight, 0.24 * alpha, 0.72, 0.72, 0.72)
+			self:drawTextCentre("v", self.width / 2, arrowY - 1, 0.85, 0.85, 0.85, alpha, UIFont.Small)
 		end
 	end
 end
 
 function MenuDockRail:new(owner)
-	local width = DOCK.RAIL_PADDING * 2 + DOCK.RAIL_SLOT
-	local o = ISPanel:new(0, 0, width, DOCK.RAIL_PADDING * 2 + DOCK.RAIL_SLOT)
+	local width = DOCK.RAIL_PADDING * 2 + DOCK.RAIL_SLOT + (DOCK.RAIL_BUTTON_EXPAND * 2)
+	local o = ISPanel:new(0, 0, width, DOCK.RAIL_PADDING * 2 + DOCK.RAIL_SLOT + (DOCK.RAIL_BUTTON_EXPAND_Y * 2))
 	setmetatable(o, self)
 	self.__index = self
 
@@ -442,13 +762,59 @@ function MenuDock:refreshRailIfAccessChanged()
 end
 
 function MenuDock:showFullForPointer()
+	self.puckAnimation = nil
 	self:setX(self:getFullX())
+end
+
+function MenuDock:startPuckAnimation(targetX, targetY, duration)
+	duration = duration or DOCK.SNAP_DURATION
+	targetY = targetY or self:getY()
+
+	if duration <= 0 then
+		self:setX(targetX)
+		self:setY(targetY)
+		self.puckAnimation = nil
+		return
+	end
+
+	self.puckAnimation = {
+		startX = self:getX(),
+		startY = self:getY(),
+		targetX = targetX,
+		targetY = targetY,
+		elapsed = 0,
+		duration = duration,
+	}
+end
+
+function MenuDock:updatePuckAnimation()
+	if not self.puckAnimation then
+		return false
+	end
+
+	local animation = self.puckAnimation
+	animation.elapsed = animation.elapsed + frameSeconds(33.3)
+
+	local progress = clamp(animation.elapsed / animation.duration, 0, 1)
+	local easedProgress = easeOut(progress)
+
+	self:setX(lerp(animation.startX, animation.targetX, easedProgress))
+	self:setY(lerp(animation.startY, animation.targetY, easedProgress))
+
+	if progress >= 1 then
+		self:setX(animation.targetX)
+		self:setY(animation.targetY)
+		self.puckAnimation = nil
+	end
+
+	return true
 end
 
 function MenuDock:startDrag()
 	self:setExpanded(false)
 	self.dragging = true
 	self.magnetEdge = nil
+	self.puckAnimation = nil
 end
 
 function MenuDock:updateDragPosition()
@@ -478,7 +844,7 @@ function MenuDock:updateDragPosition()
 	self:setY(newY)
 end
 
-function MenuDock:dockToEdge(edge)
+function MenuDock:dockToEdge(edge, animate)
 	local centerX = self:getX() + (DOCK.PUCK_SIZE / 2)
 
 	self.edge = edge or (centerX < (getCore():getScreenWidth() / 2) and "left" or "right")
@@ -489,6 +855,14 @@ function MenuDock:dockToEdge(edge)
 
 	MenuDock.state.edge = self.edge
 	MenuDock.state.y = self:getY()
+
+	local targetX = self:getDockedX()
+	if animate then
+		self:startPuckAnimation(targetX, self:getY(), DOCK.SNAP_DURATION)
+	else
+		self.puckAnimation = nil
+		self:setX(targetX)
+	end
 end
 
 function MenuDock:onMouseDown(x, y)
@@ -499,6 +873,7 @@ function MenuDock:onMouseDown(x, y)
 	self.mouseDown = true
 	self.dragging = false
 	self.magnetEdge = nil
+	self.puckAnimation = nil
 	self.dragStartMouseX = getMouseX()
 	self.dragStartMouseY = getMouseY()
 
@@ -550,7 +925,7 @@ function MenuDock:onMouseUp(x, y)
 	self:setCapture(false)
 
 	if self.dragging then
-		self:dockToEdge(self.magnetEdge)
+		self:dockToEdge(self.magnetEdge, true)
 		UIUtils.playSound("UIActivateButton")
 	else
 		self:setExpanded(not self.expanded)
@@ -597,12 +972,20 @@ function MenuDock:update()
 	self:refreshRailIfAccessChanged()
 
 	local targetExpand = self.expanded and 1 or 0
-	self.expandProgress = self.expandProgress + ((targetExpand - self.expandProgress) * frameStep(DOCK.EXPAND_ANIM_STEP))
+	self.expandProgress = self.expandProgress
+		+ ((targetExpand - self.expandProgress) * frameStep(DOCK.EXPAND_ANIM_STEP))
 	if math.abs(targetExpand - self.expandProgress) < 0.01 then
 		self.expandProgress = targetExpand
 	end
 
-	if not self.mouseDown then
+	local targetHover = (self.expanded or self.dragging or self:isMouseOver() or self.puckAnimation ~= nil) and 1 or 0
+	self.hoverProgress = self.hoverProgress + ((targetHover - self.hoverProgress) * frameStep(DOCK.HOVER_ANIM_STEP))
+	if math.abs(targetHover - self.hoverProgress) < 0.01 then
+		self.hoverProgress = targetHover
+	end
+
+	local isPuckAnimating = self:updatePuckAnimation()
+	if not self.mouseDown and not isPuckAnimating then
 		local targetX = self:getTargetX()
 		self:setX(lerp(self:getX(), targetX, frameStep(DOCK.PUCK_ANIM_STEP)))
 	end
@@ -617,22 +1000,36 @@ end
 function MenuDock:prerender()
 	self:setAlwaysOnTop(true)
 
-	local alpha = 0.92
+	local hoverProgress = self.hoverProgress or 0
+	local alpha = 0.90 + (0.10 * hoverProgress)
 	if self.dragging then
-		alpha = 0.78
-	elseif self.expanded or self:isMouseOver() then
-		alpha = 1
+		alpha = 0.80
 	end
 
 	if self.texture then
+		self:drawTextureScaled(
+			self.texture,
+			2,
+			3,
+			DOCK.PUCK_SIZE,
+			DOCK.PUCK_SIZE,
+			0.18 + (0.10 * hoverProgress),
+			0,
+			0,
+			0
+		)
 		self:drawTextureScaled(self.texture, 0, 0, DOCK.PUCK_SIZE, DOCK.PUCK_SIZE, alpha, 1, 1, 1)
 	else
-		self:drawRect(0, 0, DOCK.PUCK_SIZE, DOCK.PUCK_SIZE, 0.85, 0.07, 0.07, 0.07)
-		self:drawRectBorder(0, 0, DOCK.PUCK_SIZE, DOCK.PUCK_SIZE, 0.8, 0.72, 0.72, 0.72)
+		self:drawRect(2, 3, DOCK.PUCK_SIZE, DOCK.PUCK_SIZE, 0.20 + (0.10 * hoverProgress), 0, 0, 0)
+		self:drawRect(0, 0, DOCK.PUCK_SIZE, DOCK.PUCK_SIZE, 0.86, 0.05, 0.05, 0.05)
+		self:drawRectBorder(0, 0, DOCK.PUCK_SIZE, DOCK.PUCK_SIZE, 0.42 + (0.28 * hoverProgress), 0.72, 0.72, 0.72)
 	end
 
+	local gripX = self.edge == "left" and DOCK.PUCK_SIZE - 7 or 5
+	self:drawRect(gripX, (DOCK.PUCK_SIZE / 2) - 8, 2, 16, 0.22 + (0.26 * hoverProgress), 0.85, 0.85, 0.85)
+
 	if self.magnetEdge then
-		self:drawRectBorder(1, 1, DOCK.PUCK_SIZE - 2, DOCK.PUCK_SIZE - 2, 0.75, 0.95, 0.95, 0.95)
+		self:drawRectBorder(1, 1, DOCK.PUCK_SIZE - 2, DOCK.PUCK_SIZE - 2, 0.78, 0.95, 0.95, 0.95)
 	end
 end
 
@@ -677,9 +1074,11 @@ function MenuDock:new(playerNum)
 	o.texture = getTexture("media/ui/ElyonLib/ui_menu_dock.png")
 	o.expanded = false
 	o.expandProgress = 0
+	o.hoverProgress = 0
 	o.mouseDown = false
 	o.dragging = false
 	o.magnetEdge = nil
+	o.puckAnimation = nil
 	o.lastAccessLevel = AccessLevelUtils.normalize(AccessLevelUtils.getPlayerAccessLevel(o.playerNum))
 	o:setY(clamp(y, DOCK.EDGE_PADDING, screenHeight - DOCK.PUCK_SIZE - DOCK.EDGE_PADDING))
 
@@ -734,7 +1133,7 @@ function MenuDock.registerButton(entry)
 	if index then
 		MenuDock.entries[index] = entry
 	else
-		table.insert(MenuDock.entries, entry)
+		MenuDock.entries[#MenuDock.entries + 1] = entry
 	end
 
 	MenuDock.refreshRails()
@@ -753,6 +1152,54 @@ function MenuDock.unregisterButton(id)
 	MenuDock.refreshRails()
 	return true
 end
+
+--- Shallow-merge fields onto MenuDock.entries[entryId].badge (creates the table if needed).
+--- Clearing keys: assign nil (e.g. setEntryBadge(id, { text = "", texture = nil }) then clear textureObj handled when texture changes).
+--- Does not rebuild the dock unless you call MenuDock.refreshRails().
+---@param entryId string
+---@param patch MenuDockBadge|table|nil
+---@return boolean ok
+function MenuDock.setEntryBadge(entryId, patch)
+	local ix = MenuDock.findEntryIndex(entryId)
+	if not ix then
+		return false
+	end
+	local e = MenuDock.entries[ix]
+	if type(patch) ~= "table" then
+		return true
+	end
+	e.badge = e.badge or {}
+	for k, v in pairs(patch) do
+		if k == "texture" then
+			if v ~= e.badge.texture then
+				e.badge.textureObj = nil
+			end
+			e.badge.texture = v
+		else
+			e.badge[k] = v
+		end
+	end
+	return true
+end
+
+--- Removes the badge overlay for an entry id.
+---@param entryId string
+---@return boolean ok
+function MenuDock.clearEntryBadge(entryId)
+	local ix = MenuDock.findEntryIndex(entryId)
+	if not ix then
+		return false
+	end
+	MenuDock.entries[ix].badge = nil
+	return true
+end
+
+--- Namespaced aliases for readability from other mods.
+MenuDock.Badge = {
+	set = MenuDock.setEntryBadge,
+	clear = MenuDock.clearEntryBadge,
+	drawOnRailButton = MenuDock.drawBadgeOnRailButton,
+}
 
 function MenuDock.OnCreatePlayer(playerNum)
 	if playerNum ~= 0 then
@@ -800,6 +1247,7 @@ function MenuDock.OnResolutionChange()
 	for playerNum = 0, playerCount do
 		local dock = MenuDock.players[playerNum]
 		if dock then
+			dock.puckAnimation = nil
 			dock:clampY()
 			dock:setX(dock:getTargetX())
 			if dock.rail then

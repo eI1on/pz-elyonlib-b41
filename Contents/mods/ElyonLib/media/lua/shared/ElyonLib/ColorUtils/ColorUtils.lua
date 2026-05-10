@@ -1,12 +1,11 @@
 local ColorUtils = {}
 
----Convert HSL color values to RGB
----@param h number Hue (0-1)
----@param s number Saturation (0-1)
----@param l number Lightness (0-1)
----@return number r Red component (0-1)
----@return number g Green component (0-1)
----@return number b Blue component (0-1)
+---@param h number
+---@param s number
+---@param l number
+---@return number r
+---@return number g
+---@return number b
 function ColorUtils.hslToRgb(h, s, l)
 	local r, g, b
 
@@ -43,27 +42,27 @@ function ColorUtils.hslToRgb(h, s, l)
 	return r, g, b
 end
 
----Convert RGB to HSL
----@param r number Red component (0-1)
----@param g number Green component (0-1)
----@param b number Blue component (0-1)
----@return number h Hue (0-1)
----@return number s Saturation (0-1)
----@return number l Lightness (0-1)
+---@param r number
+---@param g number
+---@param b number
+---@return number h
+---@return number s
+---@return number l
 function ColorUtils.rgbToHsl(r, g, b)
-	local max, min = math.max(r, g, b), math.min(r, g, b)
-	local h, s, l = 0, 0, (max + min) / 2
+	local maxValue = math.max(r, g, b)
+	local minValue = math.min(r, g, b)
+	local h, s, l = 0, 0, (maxValue + minValue) / 2
 
-	if max ~= min then
-		local d = max - min
-		s = l > 0.5 and d / (2 - max - min) or d / (max + min)
+	if maxValue ~= minValue then
+		local delta = maxValue - minValue
+		s = l > 0.5 and delta / (2 - maxValue - minValue) or delta / (maxValue + minValue)
 
-		if max == r then
-			h = (g - b) / d + (g < b and 6 or 0)
-		elseif max == g then
-			h = (b - r) / d + 2
-		elseif max == b then
-			h = (r - g) / d + 4
+		if maxValue == r then
+			h = (g - b) / delta + (g < b and 6 or 0)
+		elseif maxValue == g then
+			h = (b - r) / delta + 2
+		else
+			h = (r - g) / delta + 4
 		end
 
 		h = h / 6
@@ -72,12 +71,11 @@ function ColorUtils.rgbToHsl(r, g, b)
 	return h, s, l
 end
 
----Create a color table with RGBA values
----@param r number Red component (0-1)
----@param g number Green component (0-1)
----@param b number Blue component (0-1)
----@param a number Alpha component (0-1)
----@return table color Color table with r, g, b, a fields
+---@param r number|nil
+---@param g number|nil
+---@param b number|nil
+---@param a number|nil
+---@return table color
 function ColorUtils.createColor(r, g, b, a)
 	return {
 		r = r or 0,
@@ -87,10 +85,28 @@ function ColorUtils.createColor(r, g, b, a)
 	}
 end
 
----Lighten a color by a factor
----@param color table Color table with r, g, b, a fields
----@param factor number Lighten factor (0-1)
----@return table color Lightened color
+---@param color table|nil
+---@param fallback table|nil
+---@return table|nil color
+function ColorUtils.copy(color, fallback)
+	if not color and not fallback then
+		return nil
+	end
+
+	local defaultColor = fallback or {}
+	local source = color or defaultColor
+
+	return {
+		r = source.r ~= nil and source.r or defaultColor.r or 0,
+		g = source.g ~= nil and source.g or defaultColor.g or 0,
+		b = source.b ~= nil and source.b or defaultColor.b or 0,
+		a = source.a ~= nil and source.a or defaultColor.a or 1,
+	}
+end
+
+---@param color table
+---@param factor number
+---@return table color
 function ColorUtils.lighten(color, factor)
 	local h, s, l = ColorUtils.rgbToHsl(color.r, color.g, color.b)
 	l = math.min(1, l + factor)
@@ -98,10 +114,9 @@ function ColorUtils.lighten(color, factor)
 	return ColorUtils.createColor(r, g, b, color.a)
 end
 
----Darken a color by a factor
----@param color table Color table with r, g, b, a fields
----@param factor number Darken factor (0-1)
----@return table color Darkened color
+---@param color table
+---@param factor number
+---@return table color
 function ColorUtils.darken(color, factor)
 	local h, s, l = ColorUtils.rgbToHsl(color.r, color.g, color.b)
 	l = math.max(0, l - factor)
