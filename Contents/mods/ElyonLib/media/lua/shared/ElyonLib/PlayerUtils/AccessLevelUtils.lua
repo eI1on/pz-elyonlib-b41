@@ -57,7 +57,18 @@ function AccessLevelUtils.getPlayerAccessLevel(playerNum, playerObj)
 	end
 
 	if playerObj and playerObj.getAccessLevel then
-		return AccessLevelUtils.normalize(playerObj:getAccessLevel()) or "None"
+		local playerAccessLevel = AccessLevelUtils.normalize(playerObj:getAccessLevel())
+		if playerAccessLevel and playerAccessLevel ~= "None" then
+			return playerAccessLevel
+		end
+	end
+
+	if isAdmin and isAdmin() then
+		return "Admin"
+	end
+
+	if getAccessLevel then
+		return AccessLevelUtils.normalize(getAccessLevel()) or "None"
 	end
 
 	return "None"

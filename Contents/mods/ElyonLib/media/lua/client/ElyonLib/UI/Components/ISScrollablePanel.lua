@@ -1,4 +1,5 @@
 require("ISUI/ISPanel")
+require("ElyonLib/UI/Components/ISCustomScrollBar")
 
 ---@class ISScrollablePanel : ISPanel
 ISScrollablePanel = ISPanel:derive("ISScrollablePanel")
@@ -31,10 +32,13 @@ end
 function ISScrollablePanel:render()
 	ISPanel.render(self)
 	self:clearStencilRect()
+	if self.doRepaintStencil then
+		self:repaintStencilRect(0, 0, self:getWidth(), self:getHeight())
+	end
 end
 
 function ISScrollablePanel:onMouseWheel(del)
-	if self.scrollBarVisible then
+	if self:getScrollHeight() > self:getHeight() then
 		self:setYScroll(self:getYScroll() - (del * 20))
 		return true
 	end

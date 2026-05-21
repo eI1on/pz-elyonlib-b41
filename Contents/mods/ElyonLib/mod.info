@@ -1,6 +1,6 @@
 name=Elyon Lib
 poster=poster.png
 id=ElyonLib
-description=Build 41 shared library: logging, timers, JSON/files, tables, net helpers, rewards, datetime, colours, sprites, UI theme/layout, MenuDock launcher, HudNotify toasts - install only if another mod requires it; load ElyonLib before dependent mods.
+description=Build 41 shared library: logging, timers, JSON/files, tables, net helpers, rewards, datetime, colours, sprites, UI theme/layout, MenuDock launcher, HudNotify toasts, WorldUtils (teleport/square helpers) - install only if another mod requires it; load ElyonLib before dependent mods.
 tags=Build 41,Misc,Multiplayer,Interface
 versionMin=41.0

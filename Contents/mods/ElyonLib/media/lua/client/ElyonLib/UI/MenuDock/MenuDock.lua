@@ -38,7 +38,6 @@ local DOCK = {
 	PUCK_ANIM_STEP = 0.12,
 	SNAP_DURATION = 0.28,
 	DISPLAY_NAME = "Menu Dock",
-	--- Default diameter (px) for entry.badge texture + text overlays on rail buttons
 	BADGE_DIAMETER = 20,
 	BADGE_OFFSET_X = 1,
 	BADGE_OFFSET_Y = 1,
@@ -101,6 +100,7 @@ MenuDock.state = { edge = "right" }
 MenuDock.players = {}
 MenuDock.instance = nil
 MenuDock.displayName = DOCK.DISPLAY_NAME
+MenuDock.syncTickCounter = 0
 
 function MenuDock.runVisibilityPredicate(entry, predicate, playerNum, playerObj)
 	if type(predicate) ~= "function" then
@@ -151,7 +151,6 @@ function MenuDock.getVisibleEntries(playerNum)
 	return visibleEntries
 end
 
---- Prefer the largest font that still fits inside the badge width.
 local function pickBadgeFont(displayText, maxWidth)
 	displayText = tostring(displayText)
 	local fonts = {}
@@ -183,7 +182,6 @@ local function pickBadgeFont(displayText, maxWidth)
 	return fonts[1]
 end
 
---- Called from rail buttons - draws entry.badge (texture + centered label) without mod-specific branching.
 function MenuDock.drawBadgeOnRailButton(btn, visualX, visualY, visualWidth, visualHeight, fgAlpha)
 	if not btn or not btn.entry or not btn.entry.badge then
 		return
@@ -619,15 +617,7 @@ function MenuDockRail:prerender()
 	local alpha = self.openFraction or 1
 	local entryCount = self:getEntryCount()
 
-	if entryCount <= 0 then
-		local emptySize = DOCK.RAIL_SLOT
-		local emptyX = (self.width - emptySize) / 2
-		local emptyY = (self.height - emptySize) / 2
-		self:drawRect(emptyX + 1, emptyY + 2, emptySize, emptySize, 0.12 * alpha, 0, 0, 0)
-		self:drawRect(emptyX, emptyY, emptySize, emptySize, 0.45 * alpha, 0.05, 0.05, 0.05)
-		self:drawRectBorder(emptyX, emptyY, emptySize, emptySize, 0.24 * alpha, 0.72, 0.72, 0.72)
-		self:drawTextCentre("...", self.width / 2, (self.height / 2) - 6, 0.82, 0.82, 0.82, alpha, UIFont.Small)
-	elseif self:hasOverflow() then
+	if self:hasOverflow() then
 		local arrowWidth = 28
 		local arrowHeight = DOCK.RAIL_SCROLL_HINT
 		local arrowX = (self.width - arrowWidth) / 2
@@ -966,6 +956,11 @@ function MenuDock:updateTooltip()
 end
 
 function MenuDock:update()
+	if not MenuDock.shouldShowDock(self.playerNum) then
+		MenuDock.internalDestroyDock(self.playerNum)
+		return
+	end
+
 	ISPanel.update(self)
 
 	self:clampY()
@@ -1110,6 +1105,77 @@ function MenuDock.refreshRails()
 			dock.rail:refreshButtons()
 		end
 	end
+	MenuDock.syncDockForPlayer(0)
+end
+
+function MenuDock.shouldShowDock(playerNum)
+	playerNum = playerNum or 0
+	return #MenuDock.getVisibleEntries(playerNum) > 0
+end
+
+function MenuDock.canCreateDock(playerNum)
+	playerNum = playerNum or 0
+	return AccessLevelUtils.getPlayer(playerNum) ~= nil
+end
+
+function MenuDock.internalDestroyDock(playerNum)
+	playerNum = playerNum or 0
+	local dock = MenuDock.players[playerNum]
+	if not dock then
+		return
+	end
+	dock:removeFromUIManager()
+	MenuDock.players[playerNum] = nil
+	if MenuDock.instance == dock then
+		MenuDock.instance = nil
+	end
+end
+
+function MenuDock.internalCreateDock(playerNum)
+	playerNum = playerNum or 0
+	if MenuDock.players[playerNum] then
+		return MenuDock.players[playerNum]
+	end
+	if not MenuDock.shouldShowDock(playerNum) or not MenuDock.canCreateDock(playerNum) then
+		return nil
+	end
+
+	local dock = MenuDock:new(playerNum)
+	dock:initialise()
+
+	if dock.rail then
+		dock.rail:addToUIManager()
+		dock.rail:setVisible(false)
+	end
+
+	dock:addToUIManager()
+	dock:bringToTop()
+
+	MenuDock.players[playerNum] = dock
+	if playerNum == 0 then
+		MenuDock.instance = dock
+	end
+	return dock
+end
+
+function MenuDock.syncDockForPlayer(playerNum)
+	playerNum = playerNum or 0
+	if playerNum ~= 0 then
+		return
+	end
+
+	local want = MenuDock.shouldShowDock(playerNum)
+	local dock = MenuDock.players[playerNum]
+
+	if want then
+		if not dock then
+			MenuDock.internalCreateDock(playerNum)
+		end
+	else
+		if dock then
+			MenuDock.internalDestroyDock(playerNum)
+		end
+	end
 end
 
 ---Register a button in the menu dock rail.
@@ -1194,7 +1260,6 @@ function MenuDock.clearEntryBadge(entryId)
 	return true
 end
 
---- Namespaced aliases for readability from other mods.
 MenuDock.Badge = {
 	set = MenuDock.setEntryBadge,
 	clear = MenuDock.clearEntryBadge,
@@ -1206,23 +1271,22 @@ function MenuDock.OnCreatePlayer(playerNum)
 		return
 	end
 
-	if MenuDock.players[playerNum] then
+	MenuDock.syncDockForPlayer(playerNum)
+end
+
+function MenuDock.OnTick()
+	if MenuDock.players[0] then
+		MenuDock.syncTickCounter = 0
 		return
 	end
 
-	local dock = MenuDock:new(playerNum)
-	dock:initialise()
-
-	if dock.rail then
-		dock.rail:addToUIManager()
-		dock.rail:setVisible(false)
+	MenuDock.syncTickCounter = (MenuDock.syncTickCounter or 0) + 1
+	if MenuDock.syncTickCounter < 30 then
+		return
 	end
 
-	dock:addToUIManager()
-	dock:bringToTop()
-
-	MenuDock.players[playerNum] = dock
-	MenuDock.instance = dock
+	MenuDock.syncTickCounter = 0
+	MenuDock.syncDockForPlayer(0)
 end
 
 function MenuDock.OnPlayerDeath(playerObj)
@@ -1230,16 +1294,7 @@ function MenuDock.OnPlayerDeath(playerObj)
 		return
 	end
 
-	local playerNum = playerObj:getPlayerNum()
-	local dock = MenuDock.players[playerNum]
-	if dock then
-		dock:removeFromUIManager()
-		MenuDock.players[playerNum] = nil
-	end
-
-	if MenuDock.instance == dock then
-		MenuDock.instance = nil
-	end
+	MenuDock.internalDestroyDock(playerObj:getPlayerNum())
 end
 
 function MenuDock.OnResolutionChange()
@@ -1258,6 +1313,7 @@ function MenuDock.OnResolutionChange()
 end
 
 Events.OnCreatePlayer.Add(MenuDock.OnCreatePlayer)
+Events.OnTick.Add(MenuDock.OnTick)
 Events.OnPlayerDeath.Add(MenuDock.OnPlayerDeath)
 Events.OnResolutionChange.Add(MenuDock.OnResolutionChange)
 
