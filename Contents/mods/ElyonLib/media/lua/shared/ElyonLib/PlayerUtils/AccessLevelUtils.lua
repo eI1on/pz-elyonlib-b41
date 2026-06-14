@@ -63,12 +63,14 @@ function AccessLevelUtils.getPlayerAccessLevel(playerNum, playerObj)
 		end
 	end
 
-	if isAdmin and isAdmin() then
-		return "Admin"
-	end
+	if isClient and isClient() then
+		if isAdmin and isAdmin() then
+			return "Admin"
+		end
 
-	if getAccessLevel then
-		return AccessLevelUtils.normalize(getAccessLevel()) or "None"
+		if getAccessLevel then
+			return AccessLevelUtils.normalize(getAccessLevel()) or "None"
+		end
 	end
 
 	return "None"
