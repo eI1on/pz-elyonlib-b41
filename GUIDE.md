@@ -35,7 +35,7 @@ Globals.isSingleplayer = not Globals.isServer and not Globals.isClient
 | `add(callback, intervalMs, loop)` | Stores timer; returns numeric `id`. |
 | `addSeconds` / `addMinutes` | Scale to milliseconds internally. |
 | `remove(id)` | Drops timer. |
-| Driving event | **Server:** `Events.EveryOneMinute` → `TimerManager:update()` (timers wake at most ~once/minute server-side). **Client:** `Events.OnTick` → `update()` (sub-second accuracy). |
+| Driving event | **Server:** `Events.EveryOneMinute` > `TimerManager:update()` (timers wake at most ~once/minute server-side). **Client:** `Events.OnTick` > `update()` (sub-second accuracy). |
 
 Implications:
 
@@ -58,7 +58,7 @@ Implications:
 
 | Side | `"client"` | `"server"` | `"both"` |
 | --- | --- | --- | --- |
-| Client VM | Writes local log file | N/A typical | Writes local + sends `sendClientCommand` → server writes |
+| Client VM | Writes local log file | N/A typical | Writes local + sends `sendClientCommand` > server writes |
 | Server VM | N/A typical | Writes server log | Writes server log + broadcasts to clients via `sendServerCommand` |
 
 Handlers registered in `Logger.lua`:
@@ -167,7 +167,7 @@ Consult `DateTimeUtility.lua` for exact parameter meanings (several overloads re
 - `Theme.standardColors()` returns uppercase aliases mapped to those entries (backward compatible labels like `SECTION`, `WARN`, `BUTTON_PRIMARY`).
 - `Theme.applyButtonStyle(btn, variant?)` - `nil` | `"primary"` | `"danger"` | `"success"` | `"warning"`.
 - `Theme.applyFieldStyle`, `Theme.applyListStyle`, `Theme.applyComboStyle`, `Theme.applyPanelStyle`, `Theme.applyTickBoxStyle` - assigns `backgroundColor` / `borderColor` copies.
-- `Theme.d(color)` → `a, r, g, b` for `drawRect`; `Theme.t(color)` → `r, g, b, a`; `Theme.copy` merges with default white.
+- `Theme.d(color)` > `a, r, g, b` for `drawRect`; `Theme.t(color)` > `r, g, b, a`; `Theme.copy` merges with default white.
 
 ### LayoutUtils
 
@@ -193,7 +193,7 @@ Floating puck + vertical rail. Register entries from client scripts during UI se
 | --- | --- | --- |
 | `id` | yes | Stable string; registering again replaces prior entry. |
 | `title` | no | Tooltip; falls back to `id`. |
-| `label` | no | Short rail text when no icon. Falls back through `title` → `id` with width fitting. |
+| `label` | no | Short rail text when no icon. Falls back through `title` > `id` with width fitting. |
 | `icon` | no | Texture path for `getTexture`. |
 | `texture` | no | Pre-loaded texture overrides `icon`. |
 | `target` | no | If set, `onClick` is invoked as `(target, playerNum, entry)`. If absent, `(playerNum, entry)`. Same split for `visibleWhen` but with `playerObj` before `entry`: `(target, playerNum, playerObj, entry)` vs `(playerNum, playerObj, entry)`. |

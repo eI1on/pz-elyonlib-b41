@@ -1,0 +1,22 @@
+17/06/2026
+B42 Hotfix
+
+[list]
+[*]Updated B42 access-level helpers to avoid old unsafe admin checks.
+[*]Removed reliance on deprecated or unreliable global admin access calls.
+[*]Updated MenuDock access checks to work better with B42 player role data.
+[*]Fixed a load-time issue where MenuDock buttons could fail to register correctly in some multiplayer or transition states.
+[*]Improved compatibility for dependent B42 mods using ElyonLib UI/menu helpers.
+[/list]
+
+16/06/2026
+B42 Port Changelog
+
+[list]
+[*]Added support for [b]B42[/b].
+[*]Reworked UI helpers for B42-compatible panels, buttons, fields, lists, and controls.
+[*]Updated shared styling/theme helpers used by B42 mods.
+[*]Improved modal and panel behavior for newer B42 UI handling.
+[*]Kept legacy media assets separate for B41 compatibility.
+[*]Cleaned up old B41-only assumptions so dependent mods can run properly in B42.
+[/list]

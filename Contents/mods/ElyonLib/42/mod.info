@@ -1,0 +1,6 @@
+name=Elyon Lib
+poster=poster.png
+id=ElyonLib
+description=A library with: logging, timers, JSON/files, tables, net helpers, rewards, datetime, colours, sprites, UI theme/layout, MenuDock launcher, HudNotify toasts, B42 WorldUtils, and VehicleUtils helpers - install only if another mod requires it; load ElyonLib before dependent mods.
+tags=Build 42,Misc,Multiplayer,Interface
+versionMin=42.0

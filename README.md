@@ -1,4 +1,4 @@
-# Elyon Lib ([B41])
+# Elyon Lib ([B41/B42])
 
 Lua utility library for **Project Zomboid Build 41**. Other Workshop mods depend on it so features (HUD toasts, shared menu dock, common net/file/helpers) stay in one maintained place instead of being copy-pasted everywhere.
 
@@ -7,7 +7,7 @@ Lua utility library for **Project Zomboid Build 41**. Other Workshop mods depend
 | **Players** | Subscribe only if a mod you use requires Elyon Lib. In the mod list, place **Elyon Lib above** mods that need it. |
 | **Modders** | `require("ElyonLib/…")` shared modules from `media/lua/shared` and client-only UI from `media/lua/client`. See **[GUIDE.md](GUIDE.md)** for behaviour details, contracts, and bigger examples. |
 
-Repository: [github.com/eI1on/pz-elyonlib-b41](https://github.com/eI1on/pz-elyonlib-b41).
+Repository: [github.com/eI1on/pz-elyonlib](https://github.com/eI1on/pz-elyonlib).
 
 ---
 
@@ -68,8 +68,8 @@ Require from `media/lua/client` context only.
 
 | Module | Role |
 | --- | --- |
-| `UI/MenuDock/MenuDock` | Edge-docked puck + vertical button rail (`registerButton` / `unregisterButton`). **[Full API → GUIDE.md](GUIDE.md#menudock)** |
-| `UI/Notifications/HudNotify` | Right-HUD toast stack (`push` / `pop` / `clear`, hooks, TTL). **[API → GUIDE.md](GUIDE.md#hudnotify)** |
+| `UI/MenuDock/MenuDock` | Edge-docked puck + vertical button rail (`registerButton` / `unregisterButton`). **[Full API > GUIDE.md](GUIDE.md#menudock)** |
+| `UI/Notifications/HudNotify` | Right-HUD toast stack (`push` / `pop` / `clear`, hooks, TTL). **[API > GUIDE.md](GUIDE.md#hudnotify)** |
 | `UI/Calendar/DateTimeSelector` | Date/time picker UI. |
 | `UI/Components/ISScrollablePanel` | Scrollable panel. |
 | `UI/Components/ISCustomScrollBar` | Custom scrollbar. |
