@@ -22,8 +22,6 @@
 -- SOFTWARE.
 --
 
-local Logger = require("ElyonLib/Core/ElyonLibLogger")
-
 local JSON = { _version = "0.1.2" }
 
 -------------------------------------------------------------------------------
@@ -68,7 +66,7 @@ local function encode_table(val, stack)
 
 	-- Circular reference?
 	if stack[val] then
-		Logger:error("circular reference")
+		error("circular reference")
 	end
 
 	stack[val] = true
@@ -77,12 +75,12 @@ local function encode_table(val, stack)
 		local n = 0
 		for k in pairs(val) do
 			if type(k) ~= "number" then
-				Logger:error("invalid table: mixed or invalid key types")
+				error("invalid table: mixed or invalid key types")
 			end
 			n = n + 1
 		end
 		if n ~= #val then
-			Logger:error("invalid table: sparse array")
+			error("invalid table: sparse array")
 		end
 		-- Encode
 		for i = 1, #val do
@@ -94,7 +92,7 @@ local function encode_table(val, stack)
 		-- Treat as an object
 		for k, v in pairs(val) do
 			if type(k) ~= "string" then
-				Logger:error("invalid table: mixed or invalid key types")
+				error("invalid table: mixed or invalid key types")
 			end
 			res[#res + 1] = encode(k, stack) .. ":" .. encode(v, stack)
 		end
@@ -110,7 +108,7 @@ end
 local function encode_number(val)
 	-- Check for NaN, -inf and inf
 	if val ~= val or val <= -math.huge or val >= math.huge then
-		Logger:error("unexpected number value '" .. tostring(val) .. "'")
+		error("unexpected number value '" .. tostring(val) .. "'")
 	end
 	return string.format("%.14g", val)
 end
@@ -129,7 +127,7 @@ encode = function(val, stack)
 	if f then
 		return f(val, stack)
 	end
-	Logger:error("unexpected type '" .. t .. "'")
+	error("unexpected type '" .. t .. "'")
 end
 
 function JSON.stringify(val)
@@ -180,7 +178,7 @@ local function decode_error(str, idx, msg)
 			col_count = 1
 		end
 	end
-	Logger:error(string.format("%s at line %d col %d", msg, line_count, col_count))
+	error(string.format("%s at line %d col %d", msg, line_count, col_count))
 end
 
 local function codepoint_to_utf8(n)
@@ -195,7 +193,7 @@ local function codepoint_to_utf8(n)
 	elseif n <= 0x10ffff then
 		return string.char(f(n / 262144) + 240, f(n % 262144 / 4096) + 128, f(n % 4096 / 64) + 128, n % 64 + 128)
 	end
-	Logger:error(string.format("invalid unicode codepoint '%x'", n))
+	error(string.format("invalid unicode codepoint '%x'", n))
 end
 
 local function parse_unicode_escape(s)
@@ -363,7 +361,7 @@ end
 
 function JSON.parse(str)
 	if type(str) ~= "string" then
-		Logger:error("expected argument of type string, got " .. type(str))
+		error("expected argument of type string, got " .. type(str))
 	end
 	local res, idx = parse(str, next_char(str, 1, space_chars, true))
 	idx = next_char(str, idx, space_chars, true)

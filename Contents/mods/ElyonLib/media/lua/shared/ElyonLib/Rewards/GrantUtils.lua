@@ -1,4 +1,6 @@
 local Globals = require("ElyonLib/Core/Globals")
+local PerkUtils = require("ElyonLib/PlayerUtils/PerkUtils")
+local TraitUtils = require("ElyonLib/PlayerUtils/TraitUtils")
 
 local GrantUtils = {}
 
@@ -8,23 +10,7 @@ local GrantUtils = {}
 ---@param perkName string
 ---@return any|nil perk  The Perks enum value, or nil if not found
 function GrantUtils.findPerk(perkName)
-	perkName = tostring(perkName or "")
-	if perkName == "" then
-		return nil
-	end
-
-	if Perks and Perks[perkName] then
-		return Perks[perkName]
-	end
-
-	if Perks and Perks.FromString then
-		local perk = Perks.FromString(perkName)
-		if perk and PerkFactory and PerkFactory.getPerk(perk) then
-			return perk
-		end
-	end
-
-	return nil
+	return PerkUtils.resolve(perkName)
 end
 
 --- Grants one or more items of the given full type to the player's inventory.
@@ -89,9 +75,51 @@ function GrantUtils.grantXp(player, perkName, amount, summaries, errors)
 
 	player:getXp():AddXP(perk, amount)
 
-	local perkInfo = PerkFactory and PerkFactory.getPerk(perk) or nil
-	local displayName = perkInfo and perkInfo:getName() or tostring(perkName)
+	local displayName = PerkUtils.getDisplayName(perkName)
 	summaries[#summaries + 1] = string.format("%s XP +%s", displayName, tostring(amount))
+end
+
+---@param player IsoPlayer
+---@param traitType string
+---@param summaries string[]
+---@param errors string[]
+function GrantUtils.grantTrait(player, traitType, summaries, errors)
+	if not player or not player.getTraits then
+		errors[#errors + 1] = "Player traits unavailable"
+		return
+	end
+
+	local traitInfo = TraitUtils.getInfo(traitType)
+	if not traitInfo then
+		errors[#errors + 1] = "Invalid trait reward " .. tostring(traitType)
+		return
+	end
+
+	local traits = player:getTraits()
+	local conflicts = TraitUtils.getConflictTypes(traitInfo.type)
+	for i = 1, #conflicts do
+		local conflictType = conflicts[i]
+		if traits:contains(conflictType) then
+			local conflictInfo = TraitUtils.getInfo(conflictType)
+			errors[#errors + 1] = string.format(
+				"%s conflicts with %s",
+				traitInfo.label,
+				conflictInfo and conflictInfo.label or conflictType
+			)
+			return
+		end
+	end
+
+	if traits:contains(traitInfo.type) then
+		summaries[#summaries + 1] = string.format("Trait %s (already had it)", traitInfo.label)
+		return
+	end
+
+	traits:add(traitInfo.type)
+	if player.resetModelNextFrame then
+		player:resetModelNextFrame()
+	end
+	summaries[#summaries + 1] = string.format("Trait %s", traitInfo.label)
 end
 
 return GrantUtils

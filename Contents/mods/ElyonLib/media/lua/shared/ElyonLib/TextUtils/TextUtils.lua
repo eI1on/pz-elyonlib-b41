@@ -47,6 +47,20 @@ function TextUtils.trimToWidth(font, text, maxWidth, ellipsis)
 	return TextUtils.trim(text:sub(1, low)) .. ellipsis
 end
 
+function TextUtils.truncate(text, maximumLength, ellipsis)
+	text = tostring(text or ""):gsub("[%c]+", " ")
+	maximumLength = math.max(0, math.floor(tonumber(maximumLength) or 0))
+	if #text <= maximumLength then
+		return text
+	end
+
+	ellipsis = ellipsis or "..."
+	if maximumLength <= #ellipsis then
+		return ellipsis:sub(1, maximumLength)
+	end
+	return text:sub(1, maximumLength - #ellipsis) .. ellipsis
+end
+
 function TextUtils.wrapLines(text, font, maxWidth, maxLines)
 	local lines = {}
 	if not maxWidth or maxWidth <= 0 then
@@ -90,6 +104,19 @@ end
 
 function TextUtils.fitToWidth(text, font, maxWidth)
 	return TextUtils.trimToWidth(font, text, maxWidth, ".")
+end
+
+-- Returns trimmed, non-empty lines while ignoring common config comments.
+function TextUtils.getDataLines(text)
+	local lines = {}
+	text = tostring(text or ""):gsub("\r\n", "\n"):gsub("\r", "\n")
+	for rawLine in (text .. "\n"):gmatch("(.-)\n") do
+		local line = TextUtils.trim(rawLine)
+		if line ~= "" and line:sub(1, 1) ~= "#" and line:sub(1, 2) ~= "--" then
+			lines[#lines + 1] = line
+		end
+	end
+	return lines
 end
 
 --- Sanitize a single path segment for sandbox save paths (avoid separators / reserved chars).

@@ -103,9 +103,10 @@ Same split client vs local, but invokes `serverModule[processFunctionName or "pr
 
 | Function | Notes |
 | --- | --- |
-| `findPerk(perkName)` | Lookup order: `Perks[name]`, then `Perks.FromString`, then case-insensitive scan. |
+| `findPerk(perkName)` | Lookup order: `Perks[name]`, then `Perks.FromString`. |
 | `grantItem(player, itemType, count, summaries[], errors[])` | Validates script item exists. Server path uses `:sendObjectChange("addItemOfType", { type, count })`; client/offline loops `AddItem`. |
-| `grantXp(player, perkName, amount, summaries[], errors[])` | Uses `findPerk` + `:getXp():AddXP`. Summary strings appended on success; error strings on failure - caller owns the arrays.
+| `grantXp(player, perkName, amount, summaries[], errors[])` | Uses `findPerk` + `:getXp():AddXP`. Summary strings appended on success; error strings on failure - caller owns the arrays. |
+| `grantTrait(player, traitType, summaries[], errors[])` | Validates conflicts, avoids duplicates, adds the trait, and refreshes the player model. |
 
 ---
 
@@ -132,7 +133,17 @@ Both `readFile` / `writeFile` accept `options`:
 | `createIfNull` | Passed through to reader/writer factory. |
 | `append` | Write-only; opens in append mode. |
 
-JSON helpers delegate parsing errors to ElyonLib internal logger via `pcall`.
+JSON helpers catch parser/serialization errors, log them, and return `nil`/`false`. `getLuaFilePath(filePath)` returns the absolute path under the user's `Zomboid/Lua` directory.
+
+---
+
+## Player, perk, and trait utilities
+
+- `PlayerUtils.matchesPlayerKey(player, key)` compares against the stable player key.
+- `PlayerUtils.isDataForPlayer(data, player, keyField?)` binds snapshots or payloads to a player; the default field is `playerId`.
+- `AccessLevelUtils.hasAdminAccess(player)` treats only true offline singleplayer as automatic admin. Dedicated servers fail closed and read the supplied player's access level.
+- `PerkUtils` provides cached `resolve`, `getDisplayName`, `getTexture`, `getShortLabel`, and `getOptions`.
+- `TraitUtils` provides cached metadata, conflict types, textures, labels, tooltips, lists, and combo-ready options.
 
 ---
 
@@ -171,7 +182,7 @@ Consult `DateTimeUtility.lua` for exact parameter meanings (several overloads re
 
 ### LayoutUtils
 
-Differs slightly from `UIUtils.setBounds` (Layout floors dimensions to ≥1, uses `floor` coercion). Prefer one module per codebase for consistency.
+`UIUtils.setBounds` delegates to this module, so both APIs use the same integer geometry and minimum size rules.
 
 | Function | Returns |
 | --- | --- |
@@ -180,6 +191,10 @@ Differs slightly from `UIUtils.setBounds` (Layout floors dimensions to ≥1, use
 | `clampToScreen(x,y,w,h)` | Clamped coordinates. |
 | `centreOnScreen(w,h)` | Centre `(x,y)`. |
 | `defaultWindowGeometry(desiredW,desiredH,minW,minH,margin?)` | `x,y,w,h` capped with margin from screen borders. |
+| `gridCellWidth(contentW,columns,gap,outerPadding)` | Width of one evenly spaced grid cell. |
+| `fitGridColumns(contentW,preferred,minColumns,minCellW,gap,outerPadding)` | Largest column count that keeps the requested minimum cell width. |
+
+`UIUtils` also exposes `getListContentRight`, `getListStencilBounds`, `drawClippedListRow`, and `drawFieldLabel` for scroll-safe custom list rendering.
 
 ---
 

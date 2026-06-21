@@ -1,5 +1,7 @@
 ---@alias AccessLevels "None"|"Observer"|"GM"|"Overseer"|"Moderator"|"Admin"
 
+local Globals = require("ElyonLib/Core/Globals")
+
 local AccessLevelUtils = {}
 
 AccessLevelUtils.ORDER = {
@@ -78,11 +80,7 @@ end
 
 ---@return boolean
 function AccessLevelUtils.isSinglePlayer()
-	if isClient then
-		return not isClient()
-	end
-
-	return true
+	return Globals.isSingleplayer
 end
 
 ---@param accessLevel string|nil
@@ -123,7 +121,7 @@ end
 
 --- Returns true when the given player object has Admin access (or any higher level).
 --- In singleplayer, always returns true.
---- When playerObj is nil, falls back to the client-side isAdmin() / getAccessLevel() globals.
+--- When playerObj is nil, falls back only on clients; servers fail closed.
 ---@param playerObj IsoPlayer|nil
 ---@return boolean
 function AccessLevelUtils.hasAdminAccess(playerObj)
@@ -135,11 +133,23 @@ function AccessLevelUtils.hasAdminAccess(playerObj)
 		return AccessLevelUtils.normalize(playerObj:getAccessLevel()) == "Admin"
 	end
 
-	if isAdmin and isAdmin() then
+	if Globals.isClient then
+		return AccessLevelUtils.getPlayerAccessLevel(nil, nil) == "Admin"
+	end
+
+	return false
+end
+
+---Returns true for any non-None staff access level. Singleplayer is always allowed.
+---@param playerObj IsoPlayer|nil
+---@return boolean
+function AccessLevelUtils.hasStaffAccess(playerObj)
+	if AccessLevelUtils.isSinglePlayer() then
 		return true
 	end
 
-	return AccessLevelUtils.normalize(getAccessLevel()) == "Admin" or false
+	local accessLevel = AccessLevelUtils.getPlayerAccessLevel(nil, playerObj)
+	return accessLevel ~= nil and accessLevel ~= "None"
 end
 
 return AccessLevelUtils

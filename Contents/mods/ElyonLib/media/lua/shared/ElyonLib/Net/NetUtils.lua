@@ -1,6 +1,21 @@
 local Logger = require("ElyonLib/Core/ElyonLibLogger")
 local NetUtils = {}
 
+---Dispatch a command to a handler table.
+---@param commands table|nil
+---@param command any
+---@param ... any
+---@return boolean handled
+function NetUtils.dispatchCommand(commands, command, ...)
+	local handler = type(commands) == "table" and commands[command] or nil
+	if type(handler) ~= "function" then
+		return false
+	end
+
+	handler(...)
+	return true
+end
+
 local function getLocalCommandPlayer()
 	return (getPlayer and getPlayer()) or (getSpecificPlayer and getSpecificPlayer(0)) or nil
 end

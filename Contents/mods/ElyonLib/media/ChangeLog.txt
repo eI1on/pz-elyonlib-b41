@@ -1,0 +1,22 @@
+[ ALERT_CONFIG ]
+link1 = Elyon's Kofi = https://steamcommunity.com/linkfilter/?u=https://ko-fi.com/ely0n,
+link2 = Workshop = https://steamcommunity.com/profiles/76561199033892043/myworkshopfiles/?appid=108600,
+link3 = Github = https://steamcommunity.com/linkfilter/?u=https://github.com/eI1on,
+link3 = Host Server = https://indifferentbroccoli.com/project-zomboid-server-hosting?fpr=elyon,
+[ ------ ]
+
+[ 06/21/24 B41 Utilities and Security Update ]
+ - Fixed AccessLevelUtils incorrectly treating dedicated servers as singleplayer.
+ - Updated admin-access checks to fail closed when no authenticated player is available.
+ - Added PlayerUtils.matchesPlayerKey() and PlayerUtils.isDataForPlayer() for validating player-bound network payloads.
+ - Removed unstable online ID and local player-number fallbacks from persistent player keys.
+ - Added PerkUtils with perk resolution, display names, short labels, textures, and cached selection options.
+ - Added TraitUtils with cached trait metadata, icons, tooltips, polarity, conflicts, and selection options.
+ - Added GrantUtils.grantTrait() with duplicate and mutually exclusive trait validation.
+ - Added responsive grid helpers to LayoutUtils.
+ - Added clipped list-row rendering, scrollbar-aware bounds, and field-label helpers to UIUtils.
+ - Added TextUtils.getDataLines() for parsing multiline configuration entries.
+ - Added FileUtils.getLuaFilePath() for resolving exported Lua-directory files.
+ - Updated JSON parsing and encoding to properly propagate malformed-data errors.
+ - Improved shared tick-box theming and consolidated reusable UI helpers.
+[ ------ ]

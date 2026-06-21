@@ -10,6 +10,22 @@
 
 local DateTimeUtility = {}
 
+function DateTimeUtility.formatRemaining(expiresAt, now, permanentText)
+	expiresAt = tonumber(expiresAt)
+	if not expiresAt then
+		return permanentText or "Permanent"
+	end
+
+	now = tonumber(now) or os.time()
+	local seconds = math.max(0, expiresAt - now)
+	local hours = math.floor(seconds / 3600)
+	local minutes = math.ceil((seconds % 3600) / 60)
+	if hours > 0 then
+		return string.format("%dh %dm", hours, minutes)
+	end
+	return string.format("%dm", math.max(0, minutes))
+end
+
 DateTimeUtility.CALENDAR = {
 	YEAR = 1,
 	MONTH = 2,

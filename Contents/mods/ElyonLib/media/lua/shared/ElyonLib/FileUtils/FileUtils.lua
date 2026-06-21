@@ -3,12 +3,17 @@ local JSON = require("ElyonLib/FileUtils/JSON")
 
 local FileUtils = {}
 
+function FileUtils.getLuaFilePath(filePath)
+	local separator = getFileSeparator and getFileSeparator() or "/"
+	return Core.getMyDocumentFolder() .. separator .. "Lua" .. separator .. tostring(filePath or "")
+end
+
 --- Reads the entire content of a file
 --- @param fileReader BufferedReader The BufferedReader instance
 --- @param modId string The mod's unique identifier (optional)
 --- @param options table { isModFile: boolean, createIfNull: boolean }
 --- @return string|nil content The content of the file or nil if an error occurs
-local function bufferedRead(fileReader, modId, options)
+local function bufferedRead(fileReader)
 	local buffer = {}
 	local line = fileReader:readLine()
 
@@ -68,7 +73,7 @@ function FileUtils.readFile(filePath, modId, options)
 		return nil
 	end
 
-	return bufferedRead(fileReader, modId, options)
+	return bufferedRead(fileReader)
 end
 
 --- Writes text content to a file in mod or Lua directory

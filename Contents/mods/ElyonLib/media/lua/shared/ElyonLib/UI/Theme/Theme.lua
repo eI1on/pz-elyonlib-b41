@@ -232,6 +232,7 @@ function Theme.applyTickBoxStyle(tickBox)
 	local T = Theme.colors
 	tickBox.backgroundColor = Theme.copy(T.background)
 	tickBox.borderColor = Theme.copy(T.border)
+	tickBox.choicesColor = Theme.copy(T.text)
 end
 
 return Theme

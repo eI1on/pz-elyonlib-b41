@@ -5,7 +5,7 @@ Lua utility library for **Project Zomboid Build 41**. Other Workshop mods depend
 | Audience | What to do |
 | --- | --- |
 | **Players** | Subscribe only if a mod you use requires Elyon Lib. In the mod list, place **Elyon Lib above** mods that need it. |
-| **Modders** | `require("ElyonLib/…")` shared modules from `media/lua/shared` and client-only UI from `media/lua/client`. See **[GUIDE.md](GUIDE.md)** for behaviour details, contracts, and bigger examples. |
+| **Modders** | `require("ElyonLib/...")` shared modules from `media/lua/shared` and client-only UI from `media/lua/client`. See **[GUIDE.md](GUIDE.md)** for behaviour details, contracts, and bigger examples. |
 
 Repository: [github.com/eI1on/pz-elyonlib](https://github.com/eI1on/pz-elyonlib).
 
@@ -44,23 +44,25 @@ local Globals = require("ElyonLib/Core/Globals")
 | Module | Role |
 | --- | --- |
 | `MathUtils/MathUtils` | `clamp`, `parseNumber`, `lerp`, `easeOutCubic`. |
-| `TextUtils/TextUtils` | `trim`, `measureWidth`, `trimToWidth`, `wrapLines`, `fitToWidth`, `sanitizeFileSegment`. |
+| `TextUtils/TextUtils` | `trim`, width/wrapping helpers, `getDataLines`, `sanitizeFileSegment`. |
 | `TableUtils/TableUtils` | `deepCopy`, `shallowCopy`, `contains`, `merge`. |
 | `TableUtils/TableFormatter` | `format(tbl)` - pretty print, circular refs show as `<Circular Reference>`. |
-| `FileUtils/FileUtils` | `readFile`, `writeFile`, `readJson`, `writeJson` with mod vs Lua dir options. |
+| `FileUtils/FileUtils` | `readFile`, `writeFile`, `readJson`, `writeJson`, `getLuaFilePath`. |
 | `FileUtils/JSON` | `parse` / `stringify`. |
 | `ColorUtils/ColorUtils` | HSL <> RGB, `createColor`, `copy`, `lighten`, `darken`. |
-| `PlayerUtils/PlayerUtils` | Stable `getPlayerKey`, `getOnlinePlayers`, `getOnlinePlayerByUsername`. |
+| `PlayerUtils/PlayerUtils` | Stable player keys, online lookup, `matchesPlayerKey`, `isDataForPlayer`. |
 | `PlayerUtils/AccessLevelUtils` | Normalized access order, `isAtLeast`, `hasAdminAccess`, SP/MP helpers. |
+| `PlayerUtils/PerkUtils` | Cached perk lookup, display names, icons, short labels, admin options. |
+| `PlayerUtils/TraitUtils` | Cached trait metadata, conflicts, icons, tooltips, and admin options. |
 | `ItemUtils/ItemUtils` | Cached `getScriptItem`, `getTexture`, `getTextureName`, `getDisplayName`, `getTextureFromReference`, `clearCache`. |
-| `Rewards/GrantUtils` | `findPerk`, `grantItem` (MP uses `sendObjectChange`), `grantXp`. |
+| `Rewards/GrantUtils` | `findPerk`, `grantItem`, `grantXp`, `grantTrait`. |
 | `Net/NetUtils` | Unified local vs networked command dispatch - see GUIDE. |
 | `SpritesUtils/Properties` | `setSpriteProperty`, `unsetSpriteProperty`, batch `setOrUnsetSpriteProperties`, `addValuesToPropertyMap`, debug `printPropNamesFromSprite`. |
 | `DateTime/DateTimeUtility` | Calendars, offsets, formatting, parsing, date keys vs timestamps - see GUIDE. |
 | `DateTime/DateTimeModel` | Small date/time model wrapper (`DateTimeModel.lua`). |
 | `UI/Theme/Theme` | Shared palette + `apply*Style` for buttons, fields, lists, panels, combos, tickboxes. |
-| `UI/Layout/LayoutUtils` | `setBounds`, `bottom`/`right`, `clampToScreen`, `centreOnScreen`, `defaultWindowGeometry`, visibility groups. |
-| `UI/Utils/UIUtils` | Frame delta (`frameMillis` / `frameStep`), UI sounds, hit tests, scrollbar width helpers, `drawWrappedText`. |
+| `UI/Layout/LayoutUtils` | Geometry, window placement, visibility groups, responsive grid sizing. |
+| `UI/Utils/UIUtils` | Frame delta, hit tests, list clipping/content bounds, field labels, wrapped text. |
 
 ### Client UI
 

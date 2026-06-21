@@ -7,6 +7,15 @@
 
 local LayoutUtils = {}
 
+function LayoutUtils.rect(x, y, width, height)
+	return {
+		x = tonumber(x) or 0,
+		y = tonumber(y) or 0,
+		width = tonumber(width) or 0,
+		height = tonumber(height) or 0,
+	}
+end
+
 -- ---------------------------------------------------------------------------
 -- Geometry helpers
 -- ---------------------------------------------------------------------------
@@ -48,6 +57,33 @@ function LayoutUtils.right(control)
 		return 0
 	end
 	return control:getX() + control:getWidth()
+end
+
+-- Returns the width of one cell in an evenly spaced grid.
+function LayoutUtils.gridCellWidth(contentWidth, columns, gap, outerPadding)
+	contentWidth = math.max(0, tonumber(contentWidth) or 0)
+	columns = math.max(1, math.floor(tonumber(columns) or 1))
+	gap = math.max(0, tonumber(gap) or 0)
+	outerPadding = math.max(0, tonumber(outerPadding) or 0)
+
+	local availableWidth = contentWidth - (outerPadding * 2) - (gap * (columns - 1))
+	return math.max(0, math.floor(availableWidth / columns))
+end
+
+-- Finds the largest column count whose cells satisfy the requested minimum width.
+function LayoutUtils.fitGridColumns(contentWidth, preferredColumns, minimumColumns, minimumCellWidth, gap, outerPadding)
+	preferredColumns = math.max(1, math.floor(tonumber(preferredColumns) or 1))
+	minimumColumns = math.max(1, math.min(preferredColumns, math.floor(tonumber(minimumColumns) or 1)))
+	minimumCellWidth = math.max(0, tonumber(minimumCellWidth) or 0)
+
+	local columns = preferredColumns
+	while columns > minimumColumns do
+		if LayoutUtils.gridCellWidth(contentWidth, columns, gap, outerPadding) >= minimumCellWidth then
+			break
+		end
+		columns = columns - 1
+	end
+	return columns
 end
 
 -- ---------------------------------------------------------------------------
@@ -109,7 +145,22 @@ function LayoutUtils.setEnabled(control, enabled)
 	if not control then
 		return
 	end
-	control.enable = enabled == true
+	enabled = enabled == true
+	if control.setEnable then
+		control:setEnable(enabled)
+	elseif control.setEnabled then
+		control:setEnabled(enabled)
+	else
+		control.enable = enabled
+	end
+end
+
+function LayoutUtils.setControlState(control, visible, enabled)
+	if not control then
+		return
+	end
+	LayoutUtils.setVisible(control, visible)
+	LayoutUtils.setEnabled(control, enabled)
 end
 
 return LayoutUtils

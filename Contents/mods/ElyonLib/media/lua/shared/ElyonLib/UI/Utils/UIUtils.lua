@@ -1,5 +1,6 @@
 local MathUtils = require("ElyonLib/MathUtils/MathUtils")
 local TextUtils = require("ElyonLib/TextUtils/TextUtils")
+local LayoutUtils = require("ElyonLib/UI/Layout/LayoutUtils")
 
 local UIUtils = {}
 
@@ -38,25 +39,8 @@ function UIUtils.isScreenPointInElement(element, x, y)
 	return x >= left and x < left + element:getWidth() and y >= top and y < top + element:getHeight()
 end
 
-function UIUtils.setVisible(element, visible)
-	if element then
-		element:setVisible(visible == true)
-	end
-end
-
-function UIUtils.setBounds(element, x, y, width, height)
-	if not element then
-		return
-	end
-	element:setX(x)
-	element:setY(y)
-	if width ~= nil then
-		element:setWidth(width)
-	end
-	if height ~= nil then
-		element:setHeight(height)
-	end
-end
+UIUtils.setVisible = LayoutUtils.setVisible
+UIUtils.setBounds = LayoutUtils.setBounds
 
 function UIUtils.getListScrollBarWidth(list, defaultWidth)
 	if list and list.vscroll and list.vscroll.getWidth then
@@ -77,6 +61,91 @@ function UIUtils.getListContentWidth(list, reserveScrollbar, defaultScrollBarWid
 		return width - UIUtils.getListScrollBarWidth(list, defaultScrollBarWidth)
 	end
 	return width
+end
+
+function UIUtils.getVisibleListScrollBarWidth(list)
+	if list and list.vscroll and list.isVScrollBarVisible and list:isVScrollBarVisible() then
+		return list.vscroll:getWidth()
+	end
+	return 0
+end
+
+function UIUtils.getListContentRight(list, rightInset)
+	if not list then
+		return 0
+	end
+	return list:getWidth() - UIUtils.getVisibleListScrollBarWidth(list) - (rightInset or 0)
+end
+
+function UIUtils.syncListScrollBar(list)
+	if not list or not list.vscroll then
+		return
+	end
+
+	local scrollWidth = list.vscroll:getWidth()
+	list.vscroll:setX(list:getWidth() - scrollWidth)
+	list.vscroll:setY(0)
+	list.vscroll:setHeight(list:getHeight())
+	list.vscroll:recalcSize()
+end
+
+function UIUtils.setListGeometry(list, x, y, width, height)
+	if not list then
+		return
+	end
+
+	LayoutUtils.setBounds(list, x, y, width, height)
+	list:recalcSize()
+	UIUtils.syncListScrollBar(list)
+end
+
+function UIUtils.getElementFrameRect(element, padding)
+	if not element then
+		return LayoutUtils.rect(0, 0, 0, 0)
+	end
+
+	padding = tonumber(padding) or 0
+	return LayoutUtils.rect(
+		element:getX() - padding,
+		element:getY() - padding,
+		element:getWidth() + (padding * 2),
+		element:getHeight() + (padding * 2)
+	)
+end
+
+function UIUtils.getListStencilBounds(list, y, height, scrollbarClipPadding)
+	if not list then
+		return nil
+	end
+
+	local bordered = list.drawBorder == true
+	local borderInset = bordered and 1 or 0
+	local yScroll = list.getYScroll and list:getYScroll() or 0
+	local clipX = borderInset
+	local clipY = math.max(0, y + yScroll)
+	local scrollbarVisible = list.vscroll and list.isVScrollBarVisible and list:isVScrollBarVisible()
+	local clipX2 = scrollbarVisible and (list.vscroll.x + (scrollbarClipPadding or 0))
+		or (list:getWidth() - borderInset)
+	local clipY2 = math.min(list:getHeight() - borderInset, y + height + yScroll)
+
+	if clipX2 <= clipX or clipY2 <= clipY then
+		return nil
+	end
+
+	return clipX, clipY, clipX2 - clipX, clipY2 - clipY
+end
+
+function UIUtils.drawClippedListRow(list, y, height, drawFn, scrollbarClipPadding)
+	local clipX, clipY, clipW, clipH = UIUtils.getListStencilBounds(list, y, height, scrollbarClipPadding)
+	if not clipX then
+		return false
+	end
+
+	list:setStencilRect(clipX, clipY, clipW, clipH)
+	drawFn()
+	list:clearStencilRect()
+	list:repaintStencilRect(clipX, clipY, clipW, clipH)
+	return true
 end
 
 function UIUtils.getEntryText(entry)
@@ -104,6 +173,16 @@ function UIUtils.setEntryText(entry, text)
 	end
 end
 
+function UIUtils.getTextureSize(texture)
+	if not texture then
+		return 0, 0
+	end
+
+	local width = texture.getWidthOrig and texture:getWidthOrig() or texture:getWidth()
+	local height = texture.getHeightOrig and texture:getHeightOrig() or texture:getHeight()
+	return width or 0, height or 0
+end
+
 function UIUtils.drawWrappedText(panel, text, x, y, maxWidth, color, font, maxLines, lineHeight)
 	if not panel then
 		return y
@@ -123,6 +202,28 @@ function UIUtils.drawWrappedText(panel, text, x, y, maxWidth, color, font, maxLi
 	end
 
 	return y
+end
+
+function UIUtils.drawFieldLabel(panel, text, control, width, color, font, gap)
+	if not panel or not control then
+		return
+	end
+
+	font = font or (UIFont and UIFont.Small)
+	color = color or { r = 1, g = 1, b = 1, a = 1 }
+	gap = gap or 4
+	local textManager = getTextManager and getTextManager() or nil
+	local fontHeight = textManager and font and textManager:getFontHeight(font) or 10
+	panel:drawText(
+		TextUtils.trimToWidth(font, text, width or control:getWidth()),
+		control:getX(),
+		control:getY() - fontHeight - gap,
+		color.r or 1,
+		color.g or 1,
+		color.b or 1,
+		color.a or 1,
+		font
+	)
 end
 
 return UIUtils
